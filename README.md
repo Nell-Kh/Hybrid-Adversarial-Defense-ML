@@ -2,7 +2,7 @@
 
 **Authors:** Silin Michael, Nell Khoury (November 20, 2025)
 
-## Project Goal: Building a Super Smart Guard Dog
+## Project Goal: Building a Super Smart Guard
 
 Our project is all about creating a system that can **catch and fix sneaky adversarial attacks** that try to fool AI models. Instead of just letting the model guess wrong, our system will act like a security guard: it detects the attack and then cleans the image so the model can make the right prediction.
 
