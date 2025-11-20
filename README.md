@@ -2,32 +2,39 @@
 
 **Authors:** Silin Michael, Nell Khoury (November 20, 2025)
 
-## Project Goal: Building a Super Smart Guard
+## Project Overview
 
-Our project is all about creating a system that can **catch and fix sneaky adversarial attacks** that try to fool AI models. Instead of just letting the model guess wrong, our system will act like a security guard: it detects the attack and then cleans the image so the model can make the right prediction.
+This project focuses on designing a hybrid defense system that detects and mitigates adversarial attacks on image classification models. The goal is to develop a method that can reliably identify adversarially perturbed images and apply corrective transformations that improve the model’s robustness.
 
-* **The Model We Protect:** We'll use a **ResNet-18** model.
-* **The Data We Use:** We're working with the more complex **Tiny-ImageNet** dataset (200 types of objects, $64\times64$ images).
-* **The Big Idea:** We are combining two different detectors to make the defense much stronger.
+Our work uses a **ResNet-18 classifier** trained on the **Tiny-ImageNet dataset** and incorporates two complementary detection strategies, followed by a lightweight image-restoration step.
 
-## How the System Works (The Three Main Parts)
+## 1. Target Model and Adversarial Data Generation
 
-### 1. Setting Up the Target
-First, we train our main model, the ResNet-18. We use **Transfer Learning** to save time and make it a good classifier on the Tiny-ImageNet data. Once it's trained, we create tons of fake attack images (**Adversarial Examples**) using methods like PGD. These fake images will be used to teach our security system what an attack looks like.
+We begin by training a ResNet-18 model using **transfer learning**. The model is fine-tuned on the Tiny-ImageNet dataset, which contains 200 classes of 64x64 images.
 
-### 2. The Hybrid Detector
-This is the core of our project, combining two ways to spot trouble:
+After training the classifier, we generate adversarial examples using iterative gradient-based attacks such as **Projected Gradient Descent (PGD)**. These adversarial samples serve as training data for the detection module and allow the system to learn the distinction between clean and perturbed inputs.
 
-* **Detector 1: The Stability Check:** We check how stable the model's guess is. If we make a tiny, innocent change to an image, the prediction shouldn't flip completely. If it does, the image is probably corrupt.
-* **Detector 2: The Inner Mind Reader (Activations DNN):** We look inside the Target Model, taking the numerical output from a deep layer (**Activations**). We then train a separate, smaller **Neural Network (DNN)** to look *only* at these internal numbers and decide if they came from a clean image or an attacked one. This lets the system automatically learn the hidden patterns of an attack.
+## 2. Hybrid Detection Module
 
-### 3. Active Correction (The Fixer)
-If our Hybrid Detector says "Warning! Attack Detected!", the system takes action:
+The defense system includes two independent detectors whose outputs are combined to improve reliability.
 
-* **The Fix Options:** We apply a simple cleaning transformation.
-    * **Option 1: JPEG Compression:** Applying slight JPEG Compression destroys the very weak, invisible adversarial noise.
-    * **Option 2: Total Variation Minimization (TVM):** TVM smooths the image while keeping important edges sharp, which helps remove the high-frequency adversarial noise.
-* **The Test:** We send the cleaned image back to the Target Model. If the classification is now correct, the defense worked!
+### Detector 1: Prediction Stability Analysis
 
-## Visualization and Proof
-Finally, to show exactly *where* the attack was, we'll generate a **Heatmap** using a tool like **Grad-CAM**. This map will highlight the exact pixels that the model was looking at when it made the wrong prediction, visually proving the source of the problem.
+This detector evaluates the sensitivity of the classifier to small, benign perturbations. Clean images typically produce consistent predictions under minimal input changes, while adversarial examples often lead to unstable or inconsistent outputs. The degree of prediction variation is used as a signal for identifying suspicious inputs.
+
+### Detector 2: Activation-Based DNN Classifier
+
+The second detector operates on **internal activations** of the target model rather than on the image itself. We extract features from a deep layer of the ResNet-18 and train a small neural network (**DNN**) to classify these activation vectors as originating from either clean or adversarial inputs. This approach leverages the internal representation learned by the model and enables the detector to capture subtle patterns characteristic of adversarial perturbations.
+
+## 3. Image Correction Module
+
+When an input is flagged as potentially adversarial, it is passed through a correction stage. We evaluate two preprocessing-based techniques:
+
+* **JPEG Compression:** Mild compression is applied to suppress high-frequency perturbations commonly introduced by adversarial attacks.
+* **Total Variation Minimization (TVM):** This method reduces high-frequency noise while preserving important structural details in the image.
+
+After correction, the restored image is re-evaluated by the target classifier to determine whether the prediction is recovered.
+
+## Visualization
+
+To help interpret the model’s behavior, we generate **Grad-CAM heatmaps** that highlight the regions influencing the classifier’s decisions. These visualizations provide qualitative insight into how adversarial perturbations affect the model and how the correction stage changes the focus of the network.
