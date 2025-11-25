@@ -1,6 +1,7 @@
 # Hybrid Adversarial Defense System for Tiny-ImageNet
 
-**Authors:** Silin Michael, Nell Khoury
+Silin Michael, Nell Khoury
+ 
 **Date:** November 2025
 
 ## Project Overview
