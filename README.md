@@ -28,3 +28,7 @@ The defense mechanism employs two independent detectors to ensure reliability.
 Inputs flagged as adversarial are passed through a correction stage. Two preprocessing techniques are evaluated:
 * **JPEG Compression:** Applied to suppress high-frequency perturbations introduced by attacks.
 * **Total Variation Minimization (TVM):** Reduces high-frequency noise while preserving structural details.
+
+
+## Visualization
+To help interpret the model's behavior, the system generates Grad-CAM heatmaps that highlight the regions influencing the classifier's decisions. These visualizations provide qualitative insight into how adversarial perturbations affect the model and how the correction stage changes the focus of the network.
