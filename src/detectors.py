@@ -1,18 +1,20 @@
 import torch
 import torch.nn.functional as F
 import os
+import io
 import numpy as np
 from PIL import Image
 from torchvision import transforms
-import torchvision.transforms.functional as TF
 from sklearn.metrics import roc_auc_score
 from model import get_model
 
-# Configuration
+# --- AGGRESSIVE CONFIGURATION ---
 IMG_SIZE = 64
-NOISE_STD = 0.02
-BLUR_KERNEL = 3
-ROT_DEGREES = 5
+# We shrink the image to tiny 28x28 (MNIST size)
+# This forces the attack pixels to merge and disappear
+RESIZE_TARGET = 28  
+# We use very low quality JPEG (15) to crush high-freq noise
+JPEG_QUALITY = 15   
 
 def load_image(path, device):
     t = transforms.Compose([
@@ -27,51 +29,62 @@ def load_image(path, device):
         return None
 
 def get_kl_divergence(logits1, logits2):
-    """
-    Calculates the Kullback-Leibler Divergence between two probability distributions.
-    This is a professional metric for measuring prediction instability.
-    """
     p = F.log_softmax(logits1, dim=1)
     q = F.softmax(logits2, dim=1)
     return F.kl_div(p, q, reduction='batchmean').item()
 
-def get_stability_score(model, image):
-    """
-    Detector 1: Prediction Stability Analysis.
-    Measures how much the model's confidence changes under stress.
-    """
+# --- TRANSFORM 1: AGGRESSIVE RESIZING ---
+def transform_aggressive_resize(image, device):
+    img = image * 0.5 + 0.5
+    # Shrink to tiny size
+    down = F.interpolate(img, size=RESIZE_TARGET, mode='bilinear', align_corners=False)
+    # Stretch back
+    up = F.interpolate(down, size=IMG_SIZE, mode='bilinear', align_corners=False)
+    return (up - 0.5) / 0.5
+
+# --- TRANSFORM 2: DEEP JPEG COMPRESSION ---
+def transform_aggressive_jpeg(image, device):
+    img = image.clone() * 0.5 + 0.5
+    img = torch.clamp(img, 0, 1)
+    to_pil = transforms.ToPILImage()
+    pil_img = to_pil(img.squeeze(0).cpu())
+    
+    buffer = io.BytesIO()
+    # Quality 15 is very blocky
+    pil_img.save(buffer, format="JPEG", quality=JPEG_QUALITY)
+    buffer.seek(0)
+    jpeg_img = Image.open(buffer)
+    
+    to_tensor = transforms.ToTensor()
+    t_img = to_tensor(jpeg_img).unsqueeze(0).to(device)
+    return (t_img - 0.5) / 0.5
+
+def get_anomaly_score(model, image, device):
     model.eval()
     
-    # 1. Baseline Prediction
+    # 1. Original Prediction
     with torch.no_grad():
         orig_logits = model(image)
 
-    # 2. Stress Test A: Gaussian Noise
-    noise = torch.randn_like(image) * NOISE_STD
-    with torch.no_grad():
-        noise_logits = model(image + noise)
-        
-    # 3. Stress Test B: Gaussian Blur
-    img_blur = TF.gaussian_blur(image, BLUR_KERNEL)
-    with torch.no_grad():
-        blur_logits = model(img_blur)
-        
-    # 4. Stress Test C: Geometric Rotation
-    img_rot = TF.rotate(image, ROT_DEGREES)
-    with torch.no_grad():
-        rot_logits = model(img_rot)
-
-    # Calculate Instability (Distance from original)
-    d1 = get_kl_divergence(noise_logits, orig_logits)
-    d2 = get_kl_divergence(blur_logits, orig_logits)
-    d3 = get_kl_divergence(rot_logits, orig_logits)
+    # 2. Run Aggressive Transforms
+    img_resized = transform_aggressive_resize(image, device)
+    img_jpeg = transform_aggressive_jpeg(image, device)
     
-    # The Anomaly Score is the maximum instability found
-    return max(d1, d2, d3)
+    with torch.no_grad():
+        resize_logits = model(img_resized)
+        jpeg_logits = model(img_jpeg)
+
+    # 3. Measure Instability
+    # If the image is Real, it should still look like a "Blurry Bird" (Low distance)
+    # If the image is Fake, the "Spider" pattern should be gone (High distance)
+    d1 = get_kl_divergence(resize_logits, orig_logits)
+    d2 = get_kl_divergence(jpeg_logits, orig_logits)
+    
+    return max(d1, d2)
 
 def main():
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    print(f"Running Stability Detector (KL-Divergence) on {device}...")
+    print(f"Running Aggressive Detector (Resize={RESIZE_TARGET}, JPEG={JPEG_QUALITY}) on {device}...")
 
     model = get_model(device)
     model.load_state_dict(torch.load("../models/resnet_tinyimagenet.pth", map_location=device))
@@ -90,35 +103,29 @@ def main():
         c_path = os.path.join(clean_dir, f"img_{count}.png")
         a_path = os.path.join(adv_dir, f"img_{count}.png")
         
-        if not os.path.exists(c_path):
-            break
-            
-        if count % 20 == 0:
-            print(".", end="", flush=True)
-        
-        # Test Clean
-        s_c = get_stability_score(model, load_image(c_path, device))
-        y_true.append(0) # 0 = Real
+        if not os.path.exists(c_path): break
+        if count % 10 == 0: print(".", end="", flush=True)
+
+        s_c = get_anomaly_score(model, load_image(c_path, device), device)
+        y_true.append(0)
         y_scores.append(s_c)
         
-        # Test Fake
-        s_a = get_stability_score(model, load_image(a_path, device))
-        y_true.append(1) # 1 = Fake
+        s_a = get_anomaly_score(model, load_image(a_path, device), device)
+        y_true.append(1)
         y_scores.append(s_a)
         
         count += 1
 
-    # Evaluation
     auc = roc_auc_score(y_true, y_scores)
     
-    print(f"\n\n--- Results (N={count*2}) ---")
+    print(f"\n\nResults (N={count*2})")
     print(f"ROC-AUC Score: {auc:.4f}")
     
     real_mean = np.mean([s for i,s in zip(y_true, y_scores) if i==0])
     fake_mean = np.mean([s for i,s in zip(y_true, y_scores) if i==1])
     
-    print(f"Mean Instability (Real): {real_mean:.4f}")
-    print(f"Mean Instability (Fake): {fake_mean:.4f}")
+    print(f"Avg Instability (Real): {real_mean:.4f}")
+    print(f"Avg Instability (Fake): {fake_mean:.4f}")
 
 if __name__ == "__main__":
     main()
