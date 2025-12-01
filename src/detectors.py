@@ -1,22 +1,22 @@
 import torch
 import torch.nn.functional as F
 import os
+import numpy as np
 from PIL import Image
 from torchvision import transforms
 import torchvision.transforms.functional as TF
+from sklearn.metrics import roc_auc_score
 from model import get_model
 
-# --- PRO CONFIGURATION ---
-# We test 3 different types of physical stress
-TESTS = {
-    'noise': {'std': 0.02, 'iters': 10},
-    'blur':  {'kernel': 3, 'iters': 1},     # Optical Blur (3x3 kernel)
-    'rotate': {'degrees': 5, 'iters': 1}    # Geometric Rotation (+/- 5 degrees)
-}
+# Configuration
+IMG_SIZE = 64
+NOISE_STD = 0.02
+BLUR_KERNEL = 3
+ROT_DEGREES = 5
 
-def get_image(path, device):
+def load_image(path, device):
     t = transforms.Compose([
-        transforms.Resize(64),
+        transforms.Resize(IMG_SIZE),
         transforms.ToTensor(),
         transforms.Normalize((0.5,), (0.5,))
     ])
@@ -26,41 +26,52 @@ def get_image(path, device):
     except:
         return None
 
-def check_noise_stability(model, image, base_pred, std, iters):
-    """Test 1: Does it survive random pixel static?"""
-    consistent = 0
-    for _ in range(iters):
-        noise = torch.randn_like(image) * std
-        pred = model(image + noise).argmax(1).item()
-        if pred == base_pred: consistent += 1
-    return consistent / iters
+def get_kl_divergence(logits1, logits2):
+    """
+    Calculates the Kullback-Leibler Divergence between two probability distributions.
+    This is a professional metric for measuring prediction instability.
+    """
+    p = F.log_softmax(logits1, dim=1)
+    q = F.softmax(logits2, dim=1)
+    return F.kl_div(p, q, reduction='batchmean').item()
 
-def check_blur_stability(model, image, base_pred, kernel_size):
-    """Test 2: Does it survive optical blurring? (Destroys high-freq attacks)"""
-    # We apply a slight blur. 
-    # Real objects (birds) stay birds when blurry. 
-    # Fake objects (noise patterns) usually disappear.
-    blurred_img = TF.gaussian_blur(image, kernel_size)
-    pred = model(blurred_img).argmax(1).item()
-    return 1.0 if pred == base_pred else 0.0
-
-def check_rotation_stability(model, image, base_pred, degrees):
-    """Test 3: Does it survive geometric rotation?"""
-    # Rotate slightly clockwise
-    rot_img = TF.rotate(image, degrees)
-    pred1 = model(rot_img).argmax(1).item()
+def get_stability_score(model, image):
+    """
+    Detector 1: Prediction Stability Analysis.
+    Measures how much the model's confidence changes under stress.
+    """
+    model.eval()
     
-    # Rotate slightly counter-clockwise
-    rot_img_2 = TF.rotate(image, -degrees)
-    pred2 = model(rot_img_2).argmax(1).item()
-    
-    # Return average stability (0.0, 0.5, or 1.0)
-    score = (int(pred1 == base_pred) + int(pred2 == base_pred)) / 2
-    return score
+    # 1. Baseline Prediction
+    with torch.no_grad():
+        orig_logits = model(image)
 
-def run_advanced_detector():
+    # 2. Stress Test A: Gaussian Noise
+    noise = torch.randn_like(image) * NOISE_STD
+    with torch.no_grad():
+        noise_logits = model(image + noise)
+        
+    # 3. Stress Test B: Gaussian Blur
+    img_blur = TF.gaussian_blur(image, BLUR_KERNEL)
+    with torch.no_grad():
+        blur_logits = model(img_blur)
+        
+    # 4. Stress Test C: Geometric Rotation
+    img_rot = TF.rotate(image, ROT_DEGREES)
+    with torch.no_grad():
+        rot_logits = model(img_rot)
+
+    # Calculate Instability (Distance from original)
+    d1 = get_kl_divergence(noise_logits, orig_logits)
+    d2 = get_kl_divergence(blur_logits, orig_logits)
+    d3 = get_kl_divergence(rot_logits, orig_logits)
+    
+    # The Anomaly Score is the maximum instability found
+    return max(d1, d2, d3)
+
+def main():
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    print(f"🔬 Running Multi-Modal Stress Test on {device}...")
+    print(f"Running Stability Detector (KL-Divergence) on {device}...")
 
     model = get_model(device)
     model.load_state_dict(torch.load("../models/resnet_tinyimagenet.pth", map_location=device))
@@ -69,34 +80,45 @@ def run_advanced_detector():
     clean_dir = "../data/clean_samples"
     adv_dir = "../data/adversarial_samples"
     
-    print(f"{'ID':<4} | {'Type':<6} | {'Noise':<6} | {'Blur':<6} | {'Rot':<6} | {'Composite Score'}")
-    print("-" * 65)
-
-    for i in range(10): # Test first 10 images
-        c_path = os.path.join(clean_dir, f"img_{i}.png")
-        a_path = os.path.join(adv_dir, f"img_{i}.png")
+    y_true = []
+    y_scores = []
+    
+    count = 0
+    print("Processing images...", end="", flush=True)
+    
+    while True:
+        c_path = os.path.join(clean_dir, f"img_{count}.png")
+        a_path = os.path.join(adv_dir, f"img_{count}.png")
         
-        if not os.path.exists(c_path): break
-
-        # We test both the CLEAN and the ATTACK version for each ID
-        for img_type, path in [("Real", c_path), ("Fake", a_path)]:
-            img = get_image(path, device)
+        if not os.path.exists(c_path):
+            break
             
-            # 1. Get Baseline Prediction
-            base_pred = model(img).argmax(1).item()
+        if count % 20 == 0:
+            print(".", end="", flush=True)
+        
+        # Test Clean
+        s_c = get_stability_score(model, load_image(c_path, device))
+        y_true.append(0) # 0 = Real
+        y_scores.append(s_c)
+        
+        # Test Fake
+        s_a = get_stability_score(model, load_image(a_path, device))
+        y_true.append(1) # 1 = Fake
+        y_scores.append(s_a)
+        
+        count += 1
 
-            # 2. Run The Stress Tests
-            s_noise = check_noise_stability(model, img, base_pred, TESTS['noise']['std'], TESTS['noise']['iters'])
-            s_blur  = check_blur_stability(model, img, base_pred, TESTS['blur']['kernel'])
-            s_rot   = check_rotation_stability(model, img, base_pred, TESTS['rotate']['degrees'])
-
-            # 3. Calculate Composite Score (Average of all physics tests)
-            final_score = (s_noise + s_blur + s_rot) / 3
-
-            # Print simple table row
-            print(f"{i:<4} | {img_type:<6} | {s_noise:<6.2f} | {s_blur:<6.2f} | {s_rot:<6.2f} | {final_score:.2f}")
-
-        print("-" * 65)
+    # Evaluation
+    auc = roc_auc_score(y_true, y_scores)
+    
+    print(f"\n\n--- Results (N={count*2}) ---")
+    print(f"ROC-AUC Score: {auc:.4f}")
+    
+    real_mean = np.mean([s for i,s in zip(y_true, y_scores) if i==0])
+    fake_mean = np.mean([s for i,s in zip(y_true, y_scores) if i==1])
+    
+    print(f"Mean Instability (Real): {real_mean:.4f}")
+    print(f"Mean Instability (Fake): {fake_mean:.4f}")
 
 if __name__ == "__main__":
-    run_advanced_detector()
+    main()
