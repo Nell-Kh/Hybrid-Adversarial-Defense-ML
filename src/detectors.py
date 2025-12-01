@@ -8,7 +8,6 @@ from torchvision import transforms
 from sklearn.metrics import roc_auc_score
 from model import get_model
 
-# --- AGGRESSIVE CONFIGURATION ---
 IMG_SIZE = 64
 # We shrink the image to tiny 28x28 (MNIST size)
 # This forces the attack pixels to merge and disappear
