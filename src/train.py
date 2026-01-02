@@ -3,43 +3,49 @@ import torch.nn as nn
 import torch.optim as optim
 import time
 import os
+import argparse
 from tqdm import tqdm
+import config
 from model import get_model
 from dataset import get_dataloaders
 
-# Hyperparameters
-NUM_EPOCHS = 15  # Increased slightly
-LEARNING_RATE = 0.001
-SAVE_PATH = "../models/resnet_tinyimagenet.pth"
+def train(resume=False, dry_run=False):
+    print(f"Using device: {config.DEVICE}")
+    if dry_run:
+        print("--- DRY RUN MODE ACTIVATED ---")
+        config.NUM_EPOCHS = 1
+    
+    # 1. Prepare Data
+    print("Loading data...")
+    train_loader, val_loader = get_dataloaders()
+    print(f"Data loaded: {len(train_loader)} train batches, {len(val_loader)} val batches.")
 
-def train():
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    print(f"Using device: {device}")
-
-    # 1. FIX: Get Validation Set (Split train into train/val if needed, or use test set)
-    # For simplicity, we stick to your loader but add a Scheduler
-    train_loader = get_dataloaders()
-    model = get_model(device)
+    # 2. Model, Criterion, Optimizer
+    model = get_model(config.DEVICE)
+    
+    start_epoch = 0
+    if resume and os.path.exists(config.MODEL_SAVE_PATH):
+        print("Resuming from checkpoint...")
+        model.load_state_dict(torch.load(config.MODEL_SAVE_PATH, map_location=config.DEVICE))
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    
-    # 2. FIX: Learning Rate Scheduler (Drops LR when loss stops decreasing)
+    optimizer = optim.Adam(model.parameters(), lr=config.LEARNING_RATE)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=2)
 
-    print(f"Starting training for {NUM_EPOCHS} epochs...")
+    print(f"Starting training for {config.NUM_EPOCHS} epochs...")
     best_loss = float('inf')
     
-    for epoch in range(NUM_EPOCHS):
+    for epoch in range(start_epoch, config.NUM_EPOCHS):
+        # --- TRAINING PHASE ---
         model.train()
-        running_loss = 0.0
-        correct = 0
-        total = 0
+        train_loss = 0.0
+        train_correct = 0
+        train_total = 0
         
-        loop = tqdm(train_loader, desc=f"Epoch {epoch+1}/{NUM_EPOCHS}", leave=True)
+        loop = tqdm(train_loader, desc=f"Epoch {epoch+1}/{config.NUM_EPOCHS} [Train]", leave=True)
         
         for images, labels in loop:
-            images, labels = images.to(device), labels.to(device)
+            images, labels = images.to(config.DEVICE), labels.to(config.DEVICE)
             
             optimizer.zero_grad()
             outputs = model(images)
@@ -47,24 +53,69 @@ def train():
             loss.backward()
             optimizer.step()
             
-            running_loss += loss.item()
+            train_loss += loss.item()
             _, predicted = outputs.max(1)
-            total += labels.size(0)
-            correct += predicted.eq(labels).sum().item()
+            train_total += labels.size(0)
+            train_correct += predicted.eq(labels).sum().item()
             
-            loop.set_postfix(loss=loss.item(), acc=100.*correct/total)
-        
-        # Step the scheduler
-        epoch_avg_loss = running_loss / len(train_loader)
-        scheduler.step(epoch_avg_loss)
+            loop.set_postfix(loss=loss.item(), acc=100.*train_correct/train_total)
 
-        # 3. FIX: Save only if it's the best model so far
-        if epoch_avg_loss < best_loss:
-            best_loss = epoch_avg_loss
-            if not os.path.exists("../models"): os.makedirs("../models")
-            torch.save(model.state_dict(), SAVE_PATH)
+            if dry_run:
+                print("Dry run: Training batch complete. Breaking.")
+                break
+        
+        avg_train_loss = train_loss / (1 if dry_run else len(train_loader))
+        train_acc = 100. * train_correct / train_total
+
+        # --- VALIDATION PHASE ---
+        model.eval()
+        val_loss = 0.0
+        val_correct = 0
+        val_total = 0
+        
+        with torch.no_grad():
+            for images, labels in tqdm(val_loader, desc=f"Epoch {epoch+1}/{config.NUM_EPOCHS} [Val]", leave=False):
+                images, labels = images.to(config.DEVICE), labels.to(config.DEVICE)
+                outputs = model(images)
+                loss = criterion(outputs, labels)
+                
+                val_loss += loss.item()
+                _, predicted = outputs.max(1)
+                val_total += labels.size(0)
+                val_correct += predicted.eq(labels).sum().item()
+
+                if dry_run:
+                    print("Dry run: Validation batch complete. Breaking.")
+                    break
+        
+        avg_val_loss = val_loss / (1 if dry_run else len(val_loader))
+        val_acc = 100. * val_correct / val_total
+        
+        print(f"Epoch {epoch+1} Summary: "
+              f"Train Loss: {avg_train_loss:.4f} | Train Acc: {train_acc:.2f}% | "
+              f"Val Loss: {avg_val_loss:.4f} | Val Acc: {val_acc:.2f}%")
+
+        # Step Scheduler
+        scheduler.step(avg_val_loss)
+
+        # Checkpoint
+        if avg_val_loss < best_loss:
+            print(f"Validation Loss Improved ({best_loss:.4f} -> {avg_val_loss:.4f}). Saving model...")
+            best_loss = avg_val_loss
+            # In dry run, we skip saving to avoid overwriting good models with garbage, or we save to temp
+            if not dry_run:
+                torch.save(model.state_dict(), config.MODEL_SAVE_PATH)
+            else:
+                print("Dry run: Skipping model save.")
             
-    print(f"Best model saved with loss: {best_loss:.4f}")
+    print(f"Training Complete. Best Validation Loss: {best_loss:.4f}")
+    if not dry_run:
+        print(f"Model saved to: {config.MODEL_SAVE_PATH}")
 
 if __name__ == "__main__":
-    train()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--resume", action="store_true", help="Resume from existing checkpoint")
+    parser.add_argument("--dry-run", action="store_true", help="Run a single batch for testing")
+    args = parser.parse_args()
+    
+    train(resume=args.resume, dry_run=args.dry_run)
