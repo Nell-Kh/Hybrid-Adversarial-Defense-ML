@@ -3,4 +3,5 @@ models/
 __pycache__/
 .DS_Store
 
+outputs/
 # End of gitignore
