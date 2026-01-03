@@ -1,44 +1,50 @@
-# Hybrid Adversarial Defense System
+# Hybrid Adversarial Defense System (Advanced)
 
-This project focuses on designing a hybrid defense system that detects and mitigates adversarial attacks on image classification models. The goal is to develop a method that can reliably identify adversarial perturbations and apply corrective transformations to improve the model's robustness.
+A state-of-the-art framework for detecting and defending against adversarial attacks on image classifiers using Tiny-ImageNet. This project goes beyond standard methods, implementing ensemble attacks and statistical feature analysis.
 
-Our work uses a **ResNet-18 classifier** trained on the **Tiny-ImageNet dataset** and incorporates two complementary detection strategies, followed by a lightweight image-restoration step.
+## Core Components
 
-## 1. Target Model and Adversarial Data Generation
-We begin by training a ResNet-18 model using **transfer learning**. The model is fine-tuned on the Tiny-ImageNet dataset (200 classes).
-- **Source Code**:
-    - `src/model.py`: Defines the ResNet-18 architecture.
-    - `src/train.py`: Training loop with validation and checkpointing.
-    - `src/dataset.py`: Data loading and standardization.
-    - `src/config.py`: Central configuration for all parameters.
+### 1. Robust Target Model
+- **ResNet-18** customized for Tiny-ImageNet (200 classes).
+- Trained with strict validation checkpoints and learning rate scheduling.
+- **Source**: `src/train.py`, `src/model.py`
 
-Adversarial examples are generated using **Projected Gradient Descent (PGD)**.
-- **Source Code**:
-    - `src/attack.py`: Implementation of PGD attack generation.
+### 2. Advanced Adversarial Attacks
+We implement **State-of-the-Art** attack generation to rigorously test our defenses.
+- **AutoAttack (Lite)**: An ensemble of PGD with Cross-Entropy Loss and Difference-of-Logits-Ratio (DLR) Loss. This ensures we find the worst-case perturbation.
+- **PGD (Standard)**: Classic Projected Gradient Descent.
+- **Source**: `src/auto_attack.py`, `src/attack.py`
 
-## 2. Hybrid Detection Module
-The defense system includes two independent detectors to improve reliability.
+### 3. Statistical Defense (Mahalanobis)
+Instead of simple classifiers, we use **Mahalanobis Distance** to detect adversarial examples.
+- **Mechanism**: We model the feature activations of every class as a Gaussian distribution.
+- **Detection**: Adversarial examples typically lie in low-probability regions (far from the class mean). We calculate the Mahalanobis distance in the feature space to flag anomalies.
+- **Source**: `src/mahalanobis_detector.py`
 
-### Detector 1: Prediction Stability Analysis
-Evaluates the sensitivity of the classifier to small, benign perturbations. Real images are stable; adversarial images are unstable.
-- **Source Code**: `src/detectors.py` (Implements `get_anomaly_score` based on KL-Divergence).
+## How to Run
 
-### Detector 2: Activation-Based DNN Classifier
-Operates on **internal activations** of the network. We extract features from a deep layer and train a small classifier to distinguish clean vs. adversarial features.
-- **Source Code**: `src/activation_detector.py` (Feature extraction and Logistic Regression detector).
+1.  **Install Dependencies**:
+    ```bash
+    pip install torch torchvision tqdm scikit-learn numpy
+    ```
 
-## 3. Image Correction Module
-When an input is flagged as adversarial, it is passed through a correction stage:
-- **JPEG Compression**: Suppresses high-frequency perturbations.
-- **Total Variation Minimization (TVM)**: Reduces noise while preserving structure.
-- **Source Code**: `src/detectors.py` (Contains transform logic for JPEG/Resizing).
+2.  **Evaluate Base Model**:
+    ```bash
+    python src/evaluate.py
+    ```
 
-## Project Documentation (`docs/`)
-- **[Syllabus (task.md)](docs/task.md)**: The step-by-step plan we followed to clean and refactor the code.
-- **[Walkthrough](docs/walkthrough.md)**: Proof of verification and dry-run results.
-- **[Implementation Plan](docs/implementation_plan.md)**: Technical details of the refactoring process.
+3.  **Run Full Defense Evaluation**:
+    This script generates AutoAttacks and tests the Mahalanobis detector against them.
+    ```bash
+    python src/evaluate_defense.py
+    ```
 
-## Getting Started
-1.  **Install Dependencies**: `pip install torch torchvision tqdm scikit-learn`
-2.  **Train Target Model**: `python src/train.py`
-3.  **Generate Attacks**: `python src/attack.py`
+## Project Summary & Achievements
+
+- **Code Architecture**: Centralized `config.py` for reproducible research.
+- **Data Integrity**: Validated data loading pipeline for Tiny-ImageNet.
+- **Advanced Warfare**: Upgraded from simple PGD to AutoAttack strategies.
+- **SOTA Detection**: Implemented statistical feature analysis (Mahalanobis) instead of basic supervised detection.
+
+---
+*Created by [Your Name]*
