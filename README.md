@@ -14,12 +14,17 @@ We implement **State-of-the-Art** attack generation to rigorously test our defen
 - **AutoAttack (Lite)**: An ensemble of PGD with Cross-Entropy Loss and Difference-of-Logits-Ratio (DLR) Loss. This ensures we find the worst-case perturbation.
 - **Source**: `src/auto_attack.py`
 
-### 3. Prediction Stability Detector (The "Physics" Defense)
-We successfully pivoted from statistical methods to a robust "Stability" approach.
+### 3. Detector 1: Prediction Stability (The "Physics" Defense)
 - **Mechanism**: Adversarial perturbations are high-frequency and fragile. We treat the image with "Aggressive Computations" (Resize to 28x28 + JPEG Compression).
-- **Result**: Real images retain their prediction. Adversarial images "shatter" and revert to their true class (or a different one), causing a massive spike in KL-Divergence.
+- **Result**: Real images retain their prediction. Adversarial images "shatter" and revert to their true class (or a different one).
 - **Performance**: achieved **ROC-AUC: 0.81** (High Reliability).
 - **Source**: `src/detectors.py`
+
+### 4. Detector 2: Deep Feature Analysis (The "Abstract" Defense)
+- **Mechanism**: We use **Mahalanobis Distance** to model the statistical distribution of features in the Neural Network's deeper layers.
+- **Concept**: Adversarial examples often lie outside the normal "manifold" of valid images.
+- **Result**: Provides a complementary signal, though less robust on smaller models (AUC 0.53).
+- **Source**: `src/mahalanobis_detector.py`
 
 ## How to Run
 
@@ -45,7 +50,7 @@ We successfully pivoted from statistical methods to a robust "Stability" approac
 - **Code Architecture**: Centralized `config.py` for reproducible research.
 - **Data Integrity**: Validated data loading pipeline for Tiny-ImageNet.
 - **Advanced Warfare**: Upgraded from simple PGD to AutoAttack strategies.
-- **Best Defense**: Implemented a "Prediction Stability" detector that achieved significantly better performance (AUC 0.81) than traditional statistical methods (Mahalanobis AUC 0.53) on this dataset.
+- **Dual Defense**: implemented a Hybrid System using **Prediction Stability** (AUC 0.81) and **Mahalanobis Feature Analysis** (AUC 0.53).
 
 ---
 *Created by [Your Name]*
