@@ -1,56 +1,33 @@
 # Hybrid Adversarial Defense System (Advanced)
 
-A state-of-the-art framework for detecting and defending against adversarial attacks on image classifiers using Tiny-ImageNet. This project implements advanced ensemble attacks and robust physics-based detection.
+## Project Overview
+We developed a complete end-to-end framework to study and defend against adversarial attacks on image classifiers. Using **Tiny-ImageNet** as our testbed, we trained robust models, generated state-of-the-art attacks, and built a multi-layered detection system.
 
-## Core Components
+## What We Did
 
-### 1. Robust Target Model
-- **ResNet-18** customized for Tiny-ImageNet (200 classes).
-- Trained with strict validation checkpoints and learning rate scheduling.
-- **Source**: `src/train.py`, `src/model.py`
+### 1. Robust Model Training
+We successfully trained a custom **ResNet-18** model on the Tiny-ImageNet dataset (200 classes). By implementing strict validation checkpoints and learning rate scheduling, we achieved a stable baseline for our adversarial experiments.
 
-### 2. Advanced Adversarial Attacks (AutoAttack)
-We implement **State-of-the-Art** attack generation to rigorously test our defenses.
-- **AutoAttack (Lite)**: An ensemble of PGD with Cross-Entropy Loss and Difference-of-Logits-Ratio (DLR) Loss. This ensures we find the worst-case perturbation.
-- **Source**: `src/auto_attack.py`
+### 2. Advanced Attack Generation
+To rigorously test our defenses, we implemented **AutoAttack (Lite)**. This is an ensemble attack that combines:
+- **PGD (Projected Gradient Descent)** with Cross-Entropy Loss.
+- **APGD (Auto-PGD)** with Difference-of-Logits-Ratio (DLR) Loss.
+This ensures we are testing against the "worst-case" perturbations, not just weak attacks.
 
-### 3. Detector 1: Prediction Stability (The "Physics" Defense)
-- **Mechanism**: Adversarial perturbations are high-frequency and fragile. We treat the image with "Aggressive Computations" (Resize to 28x28 + JPEG Compression).
-- **Result**: Real images retain their prediction. Adversarial images "shatter" and revert to their true class (or a different one).
-- **Performance**: achieved **ROC-AUC: 0.81** (High Reliability).
-- **Source**: `src/detectors.py`
+### 3. Novel Detection Strategies
+We explored three distinct approaches to detecting adversarial images:
 
-### 4. Detector 2: Deep Feature Analysis (The "Abstract" Defense)
-- **Mechanism**: We use **Mahalanobis Distance** to model the statistical distribution of features in the Neural Network's deeper layers.
-- **Concept**: Adversarial examples often lie outside the normal "manifold" of valid images.
-- **Result**: Provides a complementary signal, though less robust on smaller models (AUC 0.53).
-- **Source**: `src/mahalanobis_detector.py`
+*   **Prediction Stability (The "Physics" Defense)**:
+    *   *Idea*: Real images are robust; adversarial noise is fragile.
+    *   *Method*: We apply "aggressive" transformations (Resize to 28x28 + JPEG Compression) to the input.
+    *   *Result*: This was our best performer, achieving an **ROC-AUC of 0.81**. It effectively "shatters" adversarial perturbations while keeping real images intact.
 
-## How to Run
+*   **Mahalanobis Distance (The "Statistical" Defense)**:
+    *   *Idea*: Adversarial examples lie in low-probability regions of the feature space.
+    *   *Method*: We modeled the distribution of features in the deep layers of the network.
+    *   *Result*: Provided a theoretical baseline (AUC 0.53) but struggled with the high dimensionality of Tiny-ImageNet.
 
-1.  **Install Dependencies**:
-    ```bash
-    pip install torch torchvision tqdm scikit-learn numpy
-    ```
-
-2.  **Training & Attack**:
-    ```bash
-    python src/train.py       # Train the model
-    python src/auto_attack.py # Generate strong attacks
-    ```
-
-3.  **Run Full Defense Evaluation**:
-    This script runs the entire pipeline: Model Check -> AutoAttack -> Stability Defense.
-    ```bash
-    python src/evaluate_defense.py
-    ```
-
-## Project Summary & Achievements
-
-- **Code Architecture**: Centralized `config.py` for reproducible research.
-- **Data Integrity**: Validated data loading pipeline for Tiny-ImageNet.
-- **Advanced Warfare**: Upgraded from simple PGD to AutoAttack strategies.
-- **Dual Defense**: implemented a Hybrid System using **Prediction Stability** (AUC 0.81) and **Mahalanobis Feature Analysis** (AUC 0.53).
-
----
-*Created by [Your Name]*
+*   **Activation Detector (Experimental)**:
+    *   *Idea*: A simple classifier should be able to separate clean vs. adversarial activations.
+    *   *Method*: We trained a Logistic Regression on the penultimate layer features.
+    *   *Result*: Served as a lightweight, learned baseline for comparison.
