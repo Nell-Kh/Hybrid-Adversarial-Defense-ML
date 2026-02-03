@@ -15,7 +15,7 @@ We constructed a modular Python library (`src/attacks/`) containing state-of-the
 | :--- | :--- | :--- | :--- |
 | **AutoAttack** | White-Box | **100%** | Completely destroys the model with minimal distortion (L2 ≈ 2.7). |
 | **Boundary Attack** | Black-Box | **100%** | Breaks the model without access to gradients (Blind Attack). |
-| **DeepFool** | White-Box | **57.1%** | Finds the precise "shortest path" to a decision boundary. |
+| **DeepFool** | White-Box | **100%** | Finds the precise "shortest path" to a decision boundary. |
 
 ### Critical Finding: The "Normalization Blindness"
 During development, we discovered that standard attacks often fail (0% success) if data normalization is mismatched.
