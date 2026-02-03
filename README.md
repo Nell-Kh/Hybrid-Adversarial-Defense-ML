@@ -8,26 +8,41 @@ We developed a complete end-to-end framework to study and defend against adversa
 ### 1. Robust Model Training
 We successfully trained a custom **ResNet-18** model on the Tiny-ImageNet dataset (200 classes). By implementing strict validation checkpoints and learning rate scheduling, we achieved a stable baseline for our adversarial experiments.
 
-### 2. Advanced Attack Generation
-To rigorously test our defenses, we implemented **AutoAttack (Lite)**. This is an ensemble attack that combines:
-- **PGD (Projected Gradient Descent)** with Cross-Entropy Loss.
-- **APGD (Auto-PGD)** with Difference-of-Logits-Ratio (DLR) Loss.
-This ensures we are testing against the "worst-case" perturbations, not just weak attacks.
+## Key Achievements (The "Arsenal")
+We constructed a modular Python library (`src/attacks/`) containing state-of-the-art adversarial attacks.
 
-### 3. Novel Detection Strategies
-We explored three distinct approaches to detecting adversarial images:
+| Attack | Type | Success Rate | Impact |
+| :--- | :--- | :--- | :--- |
+| **AutoAttack** | White-Box | **100%** | Completely destroys the model with minimal distortion (L2 ≈ 2.7). |
+| **Boundary Attack** | Black-Box | **100%** | Breaks the model without access to gradients (Blind Attack). |
+| **DeepFool** | White-Box | **57.1%** | Finds the precise "shortest path" to a decision boundary. |
 
-*   **Prediction Stability (The "Physics" Defense)**:
-    *   *Idea*: Real images are robust; adversarial noise is fragile.
-    *   *Method*: We apply "aggressive" transformations (Resize to 28x28 + JPEG Compression) to the input.
-    *   *Result*: This was our best performer, achieving an **ROC-AUC of 0.81**. It effectively "shatters" adversarial perturbations while keeping real images intact.
+### Critical Finding: The "Normalization Blindness"
+During development, we discovered that standard attacks often fail (0% success) if data normalization is mismatched.
+*   **The Bug**: Model expected `[-1, 1]`, attacks generated `[0, 1]`.
+*   **The Fix**: We mandated `[-1, 1]` clamping in our `Attacker` base class.
+*   **Result**: DeepFool success went from **0% -> 57%**.
 
-*   **Mahalanobis Distance (The "Statistical" Defense)**:
-    *   *Idea*: Adversarial examples lie in low-probability regions of the feature space.
-    *   *Method*: We modeled the distribution of features in the deep layers of the network.
-    *   *Result*: Provided a theoretical baseline (AUC 0.53) but struggled with the high dimensionality of Tiny-ImageNet.
+## Quick Start
 
-*   **Activation Detector (Experimental)**:
-    *   *Idea*: A simple classifier should be able to separate clean vs. adversarial activations.
-    *   *Method*: We trained a Logistic Regression on the penultimate layer features.
-    *   *Result*: Served as a lightweight, learned baseline for comparison.
+### 1. Installation
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 2. Run the Benchmark
+Test all attacks against the ResNet-18 model:
+```bash
+python3 src/evaluate_suite.py
+```
+
+### 3. Generate Physical Patch
+Create a printable adversarial patch (e.g., to hide from cameras):
+```bash
+python3 src/attacks/patch.py
+```
+
+## Project Defense Status
+(Coming Soon: Adversarial Training & Mahalanobis Detection)
