@@ -38,7 +38,14 @@ Test all attacks against the ResNet-18 model:
 python3 src/evaluate_suite.py
 ```
 
-### 3. Generate Physical Patch
+### 3. Generate Attack Gallery (The "Trophy Case")
+See all attacks side-by-side on a single image:
+```bash
+python3 src/visualize_all.py
+```
+Output saved to: `data/viz_results/attack_gallery.png`
+
+### 4. Generate Physical Patch
 Create a printable adversarial patch (e.g., to hide from cameras):
 ```bash
 python3 src/attacks/patch.py
