@@ -37,6 +37,10 @@ Test all attacks against the ResNet-18 model:
 ```bash
 python3 src/evaluate_suite.py
 ```
+**Options**:
+*   Run specific attacks: `python3 src/evaluate_suite.py --attacks deepfool,boundary`
+*   Change batch size: `python3 src/evaluate_suite.py --batch-size 32`
+*   Increase difficulty: `python3 src/evaluate_suite.py --max-iters 100`
 
 ### 3. Generate Attack Gallery (The "Trophy Case")
 See all attacks side-by-side on a single image:

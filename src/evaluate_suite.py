@@ -23,7 +23,18 @@ import config
 from tqdm import tqdm
 import numpy as np
 
+import argparse
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Adversarial Attack Benchmark Suite")
+    parser.add_argument("--batch-size", type=int, default=8, help="Number of images to attack")
+    parser.add_argument("--attacks", type=str, default="all", help="Comma-separated list of attacks (auto,deepfool,boundary) or 'all'")
+    parser.add_argument("--max-iters", type=int, default=50, help="Max iterations for DeepFool")
+    parser.add_argument("--steps", type=int, default=200, help="Steps for Boundary Attack")
+    return parser.parse_args()
+
 def benchmark():
+    args = parse_args()
     device = config.DEVICE
     print(f"Benchmarking Attack Suite on {device}...")
     
@@ -32,12 +43,12 @@ def benchmark():
     model.load_state_dict(torch.load(config.MODEL_SAVE_PATH, map_location=device))
     model.eval()
     
-    # 2. Load Data (Small batch for testing)
+    # 2. Load Data
     _, val_loader = get_dataloaders()
     images, labels = next(iter(val_loader))
-    images, labels = images[:8].to(device), labels[:8].to(device) # Only 8 images for speed
+    images, labels = images[:args.batch_size].to(device), labels[:args.batch_size].to(device)
     
-    # Filter only correctly classified (No point attacking an image that is already wrong)
+    # Filter only correctly classified 
     with torch.no_grad():
         preds = model(images).argmax(1)
     mask = preds == labels
@@ -50,16 +61,22 @@ def benchmark():
     print(f"Attacking {len(images)} images...")
     
     # 3. Define the Arena (The Attacks)
-    attacks = {
-        "AutoAttack (Standard)": AutoAttackLite(model, device),
-        "DeepFool (Min-Norm)": DeepFool(model, device, max_iters=10),
-        "Boundary (Black-Box)": BoundaryAttack(model, device, steps=200) # Low steps for quick test
+    all_attacks = {
+        "auto": ("AutoAttack (Standard)", AutoAttackLite(model, device)),
+        "deepfool": ("DeepFool (Min-Norm)", DeepFool(model, device, max_iters=args.max_iters)),
+        "boundary": ("Boundary (Black-Box)", BoundaryAttack(model, device, steps=args.steps))
     }
+    
+    if args.attacks == "all":
+        target_attacks = all_attacks
+    else:
+        requested = args.attacks.split(",")
+        target_attacks = {k: v for k, v in all_attacks.items() if k in requested}
     
     results = {}
     
     # 4. Fight!
-    for name, attacker in attacks.items():
+    for key, (name, attacker) in target_attacks.items():
         print(f"\nRunning {name}...")
         
         # Run Attack

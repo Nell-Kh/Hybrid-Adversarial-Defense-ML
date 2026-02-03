@@ -24,7 +24,7 @@ class Attacker(ABC):
         self.model.eval()
 
     @abstractmethod
-    def attack(self, images, labels):
+    def attack(self, images: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         """
         The main function every attack must implement.
         
@@ -37,7 +37,7 @@ class Attacker(ABC):
         """
         pass
     
-    def _clamp(self, images):
+    def _clamp(self, images: torch.Tensor) -> torch.Tensor:
         """
         A helper to keep images valid.
         Digital images must be between 0 (black) and 1 (white).

@@ -35,7 +35,7 @@ class DeepFool(Attacker):
         # A tiny extra push to make sure we actually cross the boundary line
         self.overshoot = overshoot
 
-    def attack(self, images, labels):
+    def attack(self, images: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         # We loop over images one by one because each image might need a different number of steps.
         # Some images are near the edge (easy to break), some are safe in the middle (hard).
         
