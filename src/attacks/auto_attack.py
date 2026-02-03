@@ -56,7 +56,7 @@ class AutoAttackLite(Attacker):
         # Minimize the difference (make them cross)
         return -(true_logits - other_logits).sum()
 
-    def run_pgd(self, images, labels, loss_type="ce"):
+    def run_pgd(self, images: torch.Tensor, labels: torch.Tensor, loss_type: str="ce") -> torch.Tensor:
         """
         Projected Gradient Descent (PGD).
         The most common iterative attack.
@@ -65,7 +65,7 @@ class AutoAttackLite(Attacker):
         # (Random start helps escape bad mathematical spots)
         adv_images = images.clone().detach()
         adv_images = adv_images + torch.empty_like(adv_images).uniform_(-self.eps, self.eps)
-        adv_images = torch.clamp(adv_images, 0, 1).to(self.device)
+        adv_images = torch.clamp(adv_images, -1, 1).to(self.device)
         
         loss_fn = nn.CrossEntropyLoss()
         
@@ -91,7 +91,7 @@ class AutoAttackLite(Attacker):
             
         return adv_images
 
-    def attack(self, images, labels):
+    def attack(self, images: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         # 1. Run Strategy A (Cross-Entropy)
         adv_ce = self.run_pgd(images, labels, loss_type="ce")
         

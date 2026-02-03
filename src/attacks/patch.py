@@ -39,7 +39,7 @@ class PatchAttacker(Attacker):
         if patch_path and os.path.exists(patch_path):
             self.patch = torch.load(patch_path, map_location=device)
 
-    def attack(self, images, labels):
+    def attack(self, images: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         """
         Applies the patch to the images.
         """
