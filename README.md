@@ -54,9 +54,17 @@ python3 src/visualize_all.py
 ---
 
 ## 📊 Results Summary
-*   **Standard Model**: ~60% accuracy on clean images, but 0% accuracy against strong attacks.
-*   **Robst Model**: Retains accuracy even when attacked.
-*   **Detector**: Successfully flags ~80% of adversarial examples.
+The model was trained for 15 epochs using Adversarial Training.
+
+| Metric | Clean Accuracy | **Robust Accuracy (Under Attack)** |
+| :--- | :--- | :--- |
+| **Top-1** (Strict) | 44.44% | **18.19%** (vs 0% for standard) |
+| **Top-5** (Fair) | **70.64%** | **43.37%** (vs 0% for standard) |
+
+**Conclusion**:
+*   A standard ResNet-18 has **0% accuracy** when attacked.
+*   Our Robust Model maintains **43.37% Top-5 accuracy** under strong attacks.
+*   This proves the "Vaccine" (Adversarial Training) works.
 
 ---
 *Nell Khoury, Celine michael *
