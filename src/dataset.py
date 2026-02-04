@@ -67,7 +67,7 @@ def organize_val_folder():
     except:
         pass
 
-def get_dataloaders():
+def get_dataloaders(batch_size=config.BATCH_SIZE):
     """
     Returns (train_loader, val_loader)
     """
@@ -79,6 +79,9 @@ def get_dataloaders():
         transforms.Resize(config.IMG_SIZE),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
+        # CONCEPT: Normalization
+        # We shift data from [0, 1] to [-1, 1].
+        # Crucial Note: Attacks MUST respect this range. If an attack generates a pixel=2.0, it crashes logic.
         transforms.Normalize((0.5,), (0.5,))
     ])
 
@@ -99,7 +102,9 @@ def get_dataloaders():
     
     train_loader = DataLoader(
         train_dataset, 
-        batch_size=config.BATCH_SIZE, 
+        batch_size=batch_size, 
+        # CONCEPT: Shuffling
+        # Required for training so the model doesn't memorize the order (e.g., "First 500 are Cats").
         shuffle=True, 
         num_workers=config.NUM_WORKERS,
         pin_memory=True
@@ -107,7 +112,7 @@ def get_dataloaders():
     
     val_loader = DataLoader(
         val_dataset, 
-        batch_size=config.BATCH_SIZE, 
+        batch_size=batch_size, 
         shuffle=False, 
         num_workers=config.NUM_WORKERS,
         pin_memory=True

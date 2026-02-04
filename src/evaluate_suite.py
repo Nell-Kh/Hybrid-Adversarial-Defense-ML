@@ -31,6 +31,7 @@ def parse_args():
     parser.add_argument("--attacks", type=str, default="all", help="Comma-separated list of attacks (auto,deepfool,boundary) or 'all'")
     parser.add_argument("--max-iters", type=int, default=50, help="Max iterations for DeepFool")
     parser.add_argument("--steps", type=int, default=200, help="Steps for Boundary Attack")
+    parser.add_argument("--model", type=str, default="default", help="Path to model (.pth) or 'default'")
     return parser.parse_args()
 
 def benchmark():
@@ -40,7 +41,13 @@ def benchmark():
     
     # 1. Load Model
     model = get_model(device)
-    model.load_state_dict(torch.load(config.MODEL_SAVE_PATH, map_location=device))
+    if args.model == "default":
+        model_path = config.MODEL_SAVE_PATH
+    else:
+        model_path = args.model
+        
+    print(f"Loading model from: {model_path}")
+    model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
     
     # 2. Load Data

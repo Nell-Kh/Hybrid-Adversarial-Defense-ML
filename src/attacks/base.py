@@ -14,6 +14,9 @@ import torch
 class Attacker(ABC):
     """
     The Abstract Base Class (ABC) for all adversarial attacks.
+    # CONCEPT: Polymorphism / Interface
+    # This acts as a distinct "Contract". It guarantees that any new attack we write (DeepFool, PGD, etc.)
+    # will implement the exact same methods, allowing the rest of the code to treat them all identically.
     """
     def __init__(self, model, device):
         self.model = model
@@ -21,6 +24,7 @@ class Attacker(ABC):
         # We always set the model to 'eval' mode.
         # This tells PyTorch: "We are not training weights right now, we are just using them."
         # This turns off things like Dropout and BatchNorm updates.
+        # CRITICAL: If we forget this, the model keeps updating its internal state during the attack, which is wrong.
         self.model.eval()
 
     @abstractmethod
