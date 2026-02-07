@@ -3,4 +3,11 @@ models/
 __pycache__/
 .DS_Store
 
+<<<<<<< HEAD
 # End of gitignore
+=======
+outputs/
+.venv/
+
+# End of gitignore
+>>>>>>> 0b1ad9768dd1047971c0e1e16a447141f43dab3d
