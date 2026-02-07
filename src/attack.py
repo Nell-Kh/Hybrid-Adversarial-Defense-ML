@@ -2,15 +2,12 @@ import torch
 import torch.nn as nn
 import os
 from torchvision.utils import save_image
+from tqdm import tqdm
+import config
 from model import get_model
 from dataset import get_dataloaders
 
-# Attack Parameters
-EPSILON = 8/255 
-ALPHA = 2/255
-STEPS = 10
-
-def pgd_attack(model, images, labels, device, eps=EPSILON, alpha=ALPHA, steps=STEPS):
+def pgd_attack(model, images, labels, device, eps=config.ATTACK_EPSILON, alpha=config.ATTACK_ALPHA, steps=config.ATTACK_STEPS):
     """
     Implementation of Projected Gradient Descent (PGD) attack.
     """
@@ -38,50 +35,59 @@ def pgd_attack(model, images, labels, device, eps=EPSILON, alpha=ALPHA, steps=ST
 
     return adv_images
 
-def generate_adversarial_samples():
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    print(f"Generating attacks on {device}...")
+def generate_adversarial_samples(n_samples=50):
+    print(f"Generating attacks on {config.DEVICE}...")
 
     # Load Model
-    model = get_model(device)
-    model_path = "../models/resnet_tinyimagenet.pth"
-    
-    if os.path.exists(model_path):
-        model.load_state_dict(torch.load(model_path, map_location=device))
+    model = get_model(config.DEVICE)
+    if os.path.exists(config.MODEL_SAVE_PATH):
+        model.load_state_dict(torch.load(config.MODEL_SAVE_PATH, map_location=config.DEVICE))
     else:
-        print("Warning: Trained model not found. Using random weights.")
+        print("Warning: Trained model not found. Using random weights (Attacks will be meaningless).")
     
     model.eval()
 
     # Directories
-    clean_dir = "../data/clean_samples"
-    adv_dir = "../data/adversarial_samples"
-    os.makedirs(clean_dir, exist_ok=True)
-    os.makedirs(adv_dir, exist_ok=True)
+    os.makedirs(config.CLEAN_SAMPLES_DIR, exist_ok=True)
+    os.makedirs(config.ADV_SAMPLES_DIR, exist_ok=True)
 
-    loader = get_dataloaders()
-    count = 0
-    MAX_SAMPLES = 50
-
-    print("Starting PGD generation...")
+    # Load Data (Validation set is better for generating examples to test on)
+    _, val_loader = get_dataloaders()
     
-    for images, labels in loader:
-        images, labels = images.to(device), labels.to(device)
-        adv_images = pgd_attack(model, images, labels, device)
-
-        clean_preds = model(images).argmax(1)
+    count = 0
+    print(f"Starting PGD generation (Target: {n_samples} samples)...")
+    
+    for images, labels in val_loader:
+        if count >= n_samples: break
+        
+        images, labels = images.to(config.DEVICE), labels.to(config.DEVICE)
+        
+        # Filter for correctly classified images first
+        with torch.no_grad():
+            clean_outputs = model(images)
+            clean_preds = clean_outputs.argmax(1)
+            
+        correct_mask = (clean_preds == labels)
+        if not correct_mask.any(): continue
+        
+        # Only attack correctly classified images
+        images = images[correct_mask]
+        labels = labels[correct_mask]
+        
+        adv_images = pgd_attack(model, images, labels, config.DEVICE)
         adv_preds = model(adv_images).argmax(1)
         
         for i in range(len(images)):
-            if count >= MAX_SAMPLES: return
+            if count >= n_samples: break
 
-            # Save only successful attacks
-            if clean_preds[i] == labels[i] and adv_preds[i] != labels[i]:
-                save_image(images[i], os.path.join(clean_dir, f"img_{count}.png"))
-                save_image(adv_images[i], os.path.join(adv_dir, f"img_{count}.png"))
+            # Save if attack was successful (or we just want samples regardless?)
+            # Usually we want successful attacks for highlighting
+            if adv_preds[i] != labels[i]:
+                save_image(images[i], os.path.join(config.CLEAN_SAMPLES_DIR, f"img_{count}.png"))
+                save_image(adv_images[i], os.path.join(config.ADV_SAMPLES_DIR, f"img_{count}.png"))
                 count += 1
                 if count % 10 == 0:
-                    print(f"Generated {count}/{MAX_SAMPLES} samples")
+                    print(f"Generated {count}/{n_samples} samples")
 
 if __name__ == "__main__":
     generate_adversarial_samples()

@@ -1,34 +1,70 @@
-# Hybrid Adversarial Defense System for Tiny-ImageNet
 
-Silin Michael, Nell Khoury
+# Adversarial Attacks & Defense
 
-*Date:* November 2025
+This project explores the vulnerability of deep learning models (ResNet-18) to adversarial attacks and tests different defense mechanisms. 
+We used the **Tiny-ImageNet** dataset (200 classes) to simulate a real-world classification task.
 
-## Project Overview
-This project focuses on designing a hybrid defense system that detects and mitigates adversarial attacks on image classification models. The objective is to develop a method that can reliably identify adversarially perturbed images and apply corrective transformations to improve the model's robustness.
+The goal is to understand how easily AI models can be tricked and how we can make them more robust.
 
-The system uses a ResNet-18 classifier trained on the Tiny-ImageNet dataset and incorporates two complementary detection strategies, followed by a lightweight image-restoration step.
+---
 
-## Methodology
+## Project Structure
 
-### 1. Target Model and Adversarial Data Generation
-The foundation of the system is a ResNet-18 model trained using transfer learning. The model is fine-tuned on the Tiny-ImageNet dataset, which consists of 200 classes of 64x64 images.
+The code is organized into three main parts:
+1.  **Attacks** (`src/attacks/`): Scripts that generate adversarial examples (noisy images).
+2.  **Defense** (`src/defenses/`): Methods to detect or resist these attacks.
+3.  **Visualization** (`src/visualize_all.py`): Tools to display the results.
 
-After training the classifier, adversarial examples are generated using iterative gradient-based attacks, specifically Projected Gradient Descent (PGD). These adversarial samples serve as training data for the detection module, enabling the system to distinguish between clean and perturbed inputs.
+### 1. Attacks Implemented
+We tested four different attack methods, ranging from simple to advanced:
+*   **PGD**: A standard "brute force" attack that changes pixel values to maximize error.
+*   **DeepFool**: Finds the smallest possible change needed to flip the label.
+*   **Carlini-Wagner (CW)**: A high-confidence optimization attack (L2).
+*   **Adaptive Attack**: A custom attack we wrote that tries to fool both the model and our detection system simultaneously.
 
-### 2. Hybrid Detection Module
-The defense mechanism employs two independent detectors to ensure reliability.
+### 2. Defenses Implemented
+We implemented two defenses proposed in recent research:
+*   **Adversarial Training**: We re-trained the model on attacked images so it learns to recognize them.
+*   **Mahalanobis Detector**: A statistical method that looks at the internal layers of the network to detect "abnormal" activity.
 
-* *Detector 1: Prediction Stability Analysis*
-    This detector evaluates the sensitivity of the classifier to small, benign perturbations. Clean images typically produce consistent predictions under minimal input changes, whereas adversarial examples often exhibit unstable outputs.
+---
 
-* *Detector 2: Activation-Based DNN Classifier*
-    This detector operates on the internal activations of the target model. We extract feature vectors from deep layers of the ResNet-18 and train a secondary neural network (DNN) to classify these vectors as originating from either clean or adversarial inputs.
+## How to Run
 
-### 3. Image Correction Module
-Inputs flagged as adversarial are passed through a correction stage. Two preprocessing techniques are evaluated:
-* *JPEG Compression:* Applied to suppress high-frequency perturbations introduced by attacks.
-* *Total Variation Minimization (TVM):* Reduces high-frequency noise while preserving structural details.
+### Installation
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-## Visualization
-To help interpret the model's behavior, the system generates Grad-CAM heatmaps that highlight the regions influencing the classifier's decisions. These visualizations provide qualitative insight into how adversarial perturbations affect the model and how the correction stage changes the focus of the network.
+### Running the Evaluation
+To run all attacks and calculate the success rate:
+```bash
+python3 src/evaluate_suite.py --attacks all
+```
+
+### Visualizing Results
+To save a comparison image of Clean vs. Attacked images:
+```bash
+python3 src/visualize_all.py
+```
+*Output will be saved in `data/viz_results/`.*
+
+---
+
+## 📊 Results Summary
+The model was trained for 15 epochs using Adversarial Training.
+
+| Metric | Clean Accuracy | **Robust Accuracy (Under Attack)** |
+| :--- | :--- | :--- |
+| **Top-1** (Strict) | 44.44% | **18.19%** (vs 0% for standard) |
+| **Top-5** (Fair) | **70.64%** | **43.37%** (vs 0% for standard) |
+
+**Conclusion**:
+*   A standard ResNet-18 has **0% accuracy** when attacked.
+*   Our Robust Model maintains **43.37% Top-5 accuracy** under strong attacks.
+*   This proves the "Vaccine" (Adversarial Training) works.
+
+---
+*Nell Khoury, Celine michael *
