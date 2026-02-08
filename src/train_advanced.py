@@ -75,7 +75,7 @@ def train_advanced(epochs=50, batch_size=64, arch='resnet18', beta=6.0, dry_run=
     model.train()
     
     # 3. Optimizer & Scheduler
-    optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
+    optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4)
     # Cosine Annealing is often better for long training runs
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
     
