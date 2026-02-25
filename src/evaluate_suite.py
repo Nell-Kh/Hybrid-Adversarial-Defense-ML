@@ -47,7 +47,13 @@ def benchmark():
         model_path = args.model
         
     print(f"Loading model from: {model_path}")
-    model.load_state_dict(torch.load(model_path, map_location=device))
+    print(f"Loading model from: {model_path}")
+    checkpoint = torch.load(model_path, map_location=device)
+    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+        print("Detected checkpoint format, loading 'model_state_dict'...")
+        model.load_state_dict(checkpoint['model_state_dict'])
+    else:
+        model.load_state_dict(checkpoint)
     model.eval()
     
     # 2. Load Data

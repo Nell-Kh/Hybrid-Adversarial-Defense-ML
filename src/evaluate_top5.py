@@ -105,11 +105,12 @@ if __name__ == "__main__":
     path = os.path.join(os.path.dirname(__file__), '..', 'models', 'resnet_robust.pth')
     if os.path.exists(path):
         print(f"Loading Robust Model from {path}")
-        model.load_state_dict(torch.load(path, map_location=device))
+    checkpoint = torch.load(path, map_location=device)
+    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+        print("Detected checkpoint format, loading 'model_state_dict'...")
+        model.load_state_dict(checkpoint['model_state_dict'])
     else:
-        print("Robust model not found yet. Using standard.")
-        path = config.MODEL_SAVE_PATH
-        model.load_state_dict(torch.load(path, map_location=device))
+        model.load_state_dict(checkpoint)
         
     _, val_loader = get_dataloaders(batch_size=32)
     evaluate_robust_top5(model, device, val_loader)

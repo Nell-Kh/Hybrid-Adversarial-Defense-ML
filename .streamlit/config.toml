@@ -1,0 +1,16 @@
+[theme]
+# Primary accent color for interactive elements (buttons, sliders)
+# A professional deep blue/teal for a clean analytical look
+primaryColor = "#2E86C1"
+
+# Background color for the main content area
+backgroundColor = "#F8F9FA"
+
+# Background color for the sidebar
+secondaryBackgroundColor = "#EAECEE"
+
+# Text color
+textColor = "#2C3E50"
+
+# Font family (sans serif for modern look)
+font = "sans serif"
