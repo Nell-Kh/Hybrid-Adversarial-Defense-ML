@@ -264,7 +264,7 @@ with tab_eval:
     st.divider()
 
     # Pre-process noise for visualization (min-max normalization to make patterns visible)
-    display_noise = noise.squeeze().cpu().permute(1,2,0).numpy()
+    display_noise = noise.detach().squeeze().cpu().permute(1,2,0).numpy()
     noise_max = display_noise.max()
     if noise_max > 0:
         display_noise = display_noise / noise_max
