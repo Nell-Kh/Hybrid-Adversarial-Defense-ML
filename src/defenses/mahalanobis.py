@@ -174,6 +174,28 @@ class MahalanobisDetector:
                 
         return scores
 
+    def get_trust_score(self, images):
+        """
+        Returns a calibrated Confidence/Trust score between 0.0 and 1.0.
+        1.0 = Highly Trusted (Clean)
+        0.0 = Distrusted (Adversarial)
+        """
+        scores = self.get_mahalanobis_scores(images)
+        
+        if self.trained and hasattr(self.classifier, 'coef_'):
+            # classifier outputs proba of being class 1 (Adversarial)
+            adv_prob = self.classifier.predict_proba(scores)[:, 1]
+            return 1.0 - adv_prob
+        else:
+            # Fallback heuristic if regression is not trained: 
+            # High scores = farther = adversarial
+            # Normalize sum of scores roughly
+            total = scores.sum(axis=1)
+            # Rough calibration mapping based on empirical values
+            # E.g. anything over 1000 is usually an attack
+            trust = np.exp(-total / 1000.0) 
+            return np.clip(trust, 0.0, 1.0)
+
     def calc_torch_score(self, images):
         """
         Differentiable score calculation for Adaptive Attacks.

@@ -22,7 +22,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import random
 import os
-import config
+import src.config as config
 
 class PatchAttacker(Attacker):
     """

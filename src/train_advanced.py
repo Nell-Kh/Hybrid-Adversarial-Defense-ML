@@ -62,6 +62,8 @@ def train_advanced(epochs=50, batch_size=64, arch='resnet18', beta=6.0, dry_run=
     device = config.DEVICE
     print(f"Starting ADVANCED Training (TRADES) on {device}...")
     print(f"Arch: {arch} | Epochs: {epochs} | Beta: {beta}")
+    print("NOTE: 'Train Clean Acc' is NOT robust accuracy. It is how well the model learns the training data.")
+    
     
     # 1. Load Data
     train_loader, val_loader = get_dataloaders(batch_size=batch_size)
@@ -78,6 +80,7 @@ def train_advanced(epochs=50, batch_size=64, arch='resnet18', beta=6.0, dry_run=
     optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4)
     # Cosine Annealing is often better for long training runs
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+    
     
     # 4. AMP Scaler for GPU acceleration
     use_amp = torch.cuda.is_available() and device.type == 'cuda'
@@ -120,11 +123,13 @@ def train_advanced(epochs=50, batch_size=64, arch='resnet18', beta=6.0, dry_run=
                 total += labels.size(0)
                 correct += predicted.eq(labels).sum().item()
             
-            loop.set_postfix(acc=100.*correct/total, loss=loss.item(), rob_loss=loss_rob.item())
+            loop.set_postfix({'Train Clean Acc': 100.*correct/total, 'loss': loss.item(), 'rob_loss': loss_rob.item()})
+            
             
         scheduler.step()
         
-        print(f"Epoch {epoch+1}: Clean Acc: {100.*correct/total:.2f}% | Time: {time.time()-start_time:.0f}s")
+        print(f"Epoch {epoch+1}: Train Clean Acc: {100.*correct/total:.2f}% | Time: {time.time()-start_time:.0f}s")
+        
         
         # Save checkpoint
         torch.save({

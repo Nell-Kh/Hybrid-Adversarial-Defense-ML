@@ -67,7 +67,7 @@ def organize_val_folder():
     except:
         pass
 
-def get_dataloaders(batch_size=config.BATCH_SIZE):
+def get_dataloaders(batch_size=config.BATCH_SIZE, num_workers=config.NUM_WORKERS):
     """
     Returns (train_loader, val_loader)
     """
@@ -106,7 +106,7 @@ def get_dataloaders(batch_size=config.BATCH_SIZE):
         # CONCEPT: Shuffling
         # Required for training so the model doesn't memorize the order (e.g., "First 500 are Cats").
         shuffle=True, 
-        num_workers=config.NUM_WORKERS,
+        num_workers=num_workers,
         pin_memory=True
     )
     
@@ -114,7 +114,7 @@ def get_dataloaders(batch_size=config.BATCH_SIZE):
         val_dataset, 
         batch_size=batch_size, 
         shuffle=False, 
-        num_workers=config.NUM_WORKERS,
+        num_workers=num_workers,
         pin_memory=True
     )
     
