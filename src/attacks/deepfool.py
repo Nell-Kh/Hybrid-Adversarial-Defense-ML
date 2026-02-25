@@ -25,7 +25,7 @@ It tries to answer: "What is the shortest path to the decision boundary?"
 from .base import Attacker
 import torch
 import torch.nn.functional as F
-import config
+import src.config as config
 
 class DeepFool(Attacker):
     def __init__(self, model, device, max_iters=50, overshoot=0.02):

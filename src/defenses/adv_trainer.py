@@ -18,39 +18,54 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../'))
 import src.config as config
 from src.model import get_model
 from src.dataset import get_dataloaders
+import torch.nn.functional as F
 
-def pgd_attack(model, images, labels, eps=0.031, alpha=0.007, steps=7):
+def trades_loss(model, x_natural, y, optimizer, step_size=0.007, epsilon=0.031, perturb_steps=7, beta=6.0):
     """
-    Fast PGD for Adversarial Training (Madry et al.)
-    # CONCEPT: Efficiency Trade-off
-    # A full attack (to break the model) needs 40+ steps.
-    # But if we did that during training, it would take weeks.
-    # We use a "Weakened Virus" (7 steps) to train the immune system faster.
+    TRADES: TRadeoff-inspired Adversarial DEfense via Surrogate-loss minimization.
+    Mathematically superior to standard PGD. It balances clean accuracy (CrossEntropy)
+    with adversarial robustness (KL-Divergence between clean and adv logits).
     """
-    images = images.clone().detach().to(config.DEVICE)
-    labels = labels.to(config.DEVICE)
+    criterion_ce = nn.CrossEntropyLoss()
+    criterion_kl = nn.KLDivLoss(reduction='sum')
     
-    # 1. Random Start (Important for training diversity)
-    adv_images = images + torch.empty_like(images).uniform_(-eps, eps)
-    adv_images = torch.clamp(adv_images, -1, 1).detach()
+    model.eval()
+    batch_size = len(x_natural)
     
-    loss_fn = nn.CrossEntropyLoss()
+    # 1. Generate adversarial example (Maximize KL-Divergence instead of Error)
+    # Start with small random noise
+    x_adv = x_natural.detach() + 0.001 * torch.randn(x_natural.shape).to(config.DEVICE).detach()
     
-    for _ in range(steps):
-        adv_images.requires_grad = True
-        outputs = model(adv_images)
-        loss = loss_fn(outputs, labels)
+    for _ in range(perturb_steps):
+        x_adv.requires_grad_()
+        with torch.enable_grad():
+            clean_softmax = F.softmax(model(x_natural), dim=1)
+            adv_log_softmax = F.log_softmax(model(x_adv), dim=1)
+            loss_kl = criterion_kl(adv_log_softmax, clean_softmax)
+            
+        grad = torch.autograd.grad(loss_kl, [x_adv])[0]
+        x_adv = x_adv.detach() + step_size * torch.sign(grad.detach())
+        x_adv = torch.min(torch.max(x_adv, x_natural - epsilon), x_natural + epsilon)
+        x_adv = torch.clamp(x_adv, -1.0, 1.0)
         
-        grad = torch.autograd.grad(loss, adv_images, retain_graph=False, create_graph=False)[0]
-        
-        adv_images = adv_images.detach() + alpha * grad.sign()
-        
-        # Clip to epsilon ball
-        delta = torch.clamp(adv_images - images, min=-eps, max=eps)
-        # Clip to valid image range [-1, 1]
-        adv_images = torch.clamp(images + delta, min=-1, max=1).detach()
-        
-    return adv_images
+    model.train()
+    x_adv = x_adv.detach()
+    
+    # 2. Calculate TRADES objective
+    optimizer.zero_grad()
+    logits = model(x_natural)
+    
+    # Standard Loss (Accuracy on Clean Images: "Don't forget what a dog is")
+    loss_natural = criterion_ce(logits, y)
+    
+    # Robust Loss (Consistency on Adv Images: "Don't change your mind when noise is added")
+    clean_softmax = F.softmax(logits, dim=1) # Reuse logits
+    adv_log_softmax = F.log_softmax(model(x_adv), dim=1)
+    loss_robust = (1.0 / batch_size) * criterion_kl(adv_log_softmax, clean_softmax)
+    
+    # Final Balanced Objective
+    loss = loss_natural + beta * loss_robust
+    return loss, logits
 
 def train_robust_model(epochs=5, batch_size=64):
     device = config.DEVICE
@@ -92,23 +107,14 @@ def train_robust_model(epochs=5, batch_size=64):
         for images, labels in loop:
             images, labels = images.to(device), labels.to(device)
             
-            # --- THE MAGIC STEP (The Vaccine) ---
-            # Normal training: Input -> Model -> Loss
-            # Adversarial Training: Input -> Attack Generator -> Adversarial Input -> Model -> Loss
+            # --- THE MAGIC STEP (TRADES Vaccine) ---
+            loss, logits = trades_loss(model, images, labels, optimizer)
             
-            model.eval() # 1. Freeze model to generate the attack (don't update weights yet)
-            adv_images = pgd_attack(model, images, labels)
-            model.train() # 2. Unfreeze model to learn how to resist the attack
-            # ----------------------
-            
-            optimizer.zero_grad()
-            outputs = model(adv_images)
-            loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
             
             total_loss += loss.item()
-            _, predicted = outputs.max(1)
+            _, predicted = logits.max(1)
             total += labels.size(0)
             correct += predicted.eq(labels).sum().item()
             

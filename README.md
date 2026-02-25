@@ -24,8 +24,8 @@ We tested four different attack methods, ranging from simple to advanced:
 
 ### 2. Defenses Implemented
 We implemented two defenses proposed in recent research:
-*   **Adversarial Training**: We re-trained the model on attacked images so it learns to recognize them.
-*   **Mahalanobis Detector**: A statistical method that looks at the internal layers of the network to detect "abnormal" activity.
+*   **Adversarial Training (TRADES)**: We use the **TRADES** algorithm (Zhang et al. 2019), which mathematically optimizes the trade-off between accuracy and robustness. This is a significant upgrade over standard PGD training.
+*   **Mahalanobis Detector**: A statistical method that looks at the internal layers of the network to detect "abnormal" activity (Out-Of-Distribution detection).
 
 ---
 
@@ -43,6 +43,13 @@ To run all attacks and calculate the success rate:
 ```bash
 python3 src/evaluate_suite.py --attacks all
 ```
+
+### Training the Defense (Requires GPU)
+To train the robust model using TRADES:
+```bash
+python3 src/train_advanced.py --arch resnet18 --epochs 40 --beta 6.0
+```
+*This will save the model to `models/resnet18_trades_beta6.0.pth`.*
 
 ### Visualizing Results
 To save a comparison image of Clean vs. Attacked images:

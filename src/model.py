@@ -3,21 +3,28 @@ import torch.nn as nn
 from torchvision import models
 import config
 
-def get_model(device=config.DEVICE):
+def get_model(device=config.DEVICE, arch='resnet18'):
     """
-    Returns a ResNet-18 model modified for 200 classes.
+    Returns a model modified for 200 classes.
+    Args:
+        device: torch device
+        arch: 'resnet18', 'resnet50', or 'wide_resnet50_2'
     """
-    # Load pre-trained ResNet18
-    # CONCEPT: Transfer Learning
-    # We load a model that has already "read the internet" (ImageNet trained).
-    # This gives us a huge head start compared to random weights.
-    model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+    print(f"Initializing {arch}...")
+    
+    if arch == 'resnet18':
+        model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+        num_features = model.fc.in_features
+    elif arch == 'resnet50':
+        model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+        num_features = model.fc.in_features
+    elif arch == 'wide_resnet50_2':
+        model = models.wide_resnet50_2(weights=models.Wide_ResNet50_2_Weights.DEFAULT)
+        num_features = model.fc.in_features
+    else:
+        raise ValueError(f"Unknown architecture: {arch}")
 
     # Modify the final classification layer for Tiny-ImageNet (200 classes)
-    num_features = model.fc.in_features
-    # CONCEPT: "Model Surgery"
-    # The original ResNet has 1000 outputs. We cut that off and attach a new "head"
-    # that has exactly 200 outputs for our specific dataset.
     model.fc = nn.Linear(num_features, config.NUM_CLASSES)
 
     model = model.to(device)
