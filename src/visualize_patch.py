@@ -3,9 +3,16 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import os
 import argparse
+import sys
+import os
+
+# Add the parent directory and src directory to paths to resolve 'model', 'dataset', etc.
+sys.path.append(os.path.join(os.path.dirname(__file__), '../'))
+sys.path.append(os.path.dirname(__file__))
+
 from model import get_model
 from dataset import get_dataloaders
-from patch_attack import PatchApplier, AdversarialPatch # Re-using classes
+from attacks.patch import PatchApplier # Re-using classes
 import config
 
 def get_saliency_map(model, image, label):
