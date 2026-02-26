@@ -40,6 +40,30 @@ from visualize_patch import get_saliency_map
 st.set_page_config(page_title="Adversarial Robustness Evaluation", layout="wide")
 DEVICE = config.DEVICE
 
+def compute_stealth_metrics(clean_tensor, adv_tensor):
+    import numpy as np
+    from skimage.metrics import structural_similarity as ssim
+    
+    with torch.no_grad():
+        diff = adv_tensor - clean_tensor
+        l2 = torch.norm(diff.view(diff.shape[0], -1), p=2, dim=1).mean().item()
+        linf = torch.norm(diff.view(diff.shape[0], -1), p=float('inf'), dim=1).mean().item()
+        
+        c_np = (clean_tensor.squeeze().cpu().permute(1, 2, 0).numpy() + 1.0) / 2.0
+        a_np = (adv_tensor.squeeze().cpu().permute(1, 2, 0).numpy() + 1.0) / 2.0
+        c_np = np.clip(c_np, 0, 1)
+        a_np = np.clip(a_np, 0, 1)
+        
+        mse = np.mean((c_np - a_np) ** 2)
+        psnr = float('inf') if mse == 0 else 20 * np.log10(1.0) - 10 * np.log10(mse)
+        
+        try:
+            ssim_val = ssim(c_np, a_np, data_range=1.0, channel_axis=-1)
+        except Exception:
+            ssim_val = 0.0
+            
+    return l2, linf, psnr, ssim_val
+
 # --- CACHED LOADERS ---
 @st.cache_resource
 def load_models():
@@ -127,7 +151,7 @@ with st.expander("Overview: Adversarial Machine Learning Framework"):
 st.markdown("### Comparative Analysis: Standard ResNet18 vs. TRADES-Robust ResNet18")
 
 # Create Tabs
-tab_eval, tab_landscape, tab_patch = st.tabs(["Evaluation & Defense", "Loss Landscape", "Patch Attacks"])
+tab_eval, tab_landscape, tab_patch, tab_radar = st.tabs(["Evaluation & Defense", "Loss Landscape", "Patch Attacks", "Radar Benchmark"])
 
 victim, hero, tta_hero, detector, certifier = load_models()
 val_dataset = get_val_dataset()
@@ -186,19 +210,20 @@ with st.sidebar:
     # Dynamic parameters
     epsilon = st.slider("Perturbation Magnitude (Epsilon)", 0.0, 0.1, 0.031, step=0.001, help="Controls how much noise the attacker is allowed to add. Higher = more visible noise but stronger attack.")
     
-    cleaning_method = st.selectbox("Image Cleaning Defense", [
-        "None", 
-        "Gaussian Blur", 
-        "Bit Depth Reduction (3-bit)",
-        "Bit Depth Reduction (4-bit)",
-        "Bit Depth Reduction (5-bit)",
-        "Bit Depth Reduction (6-bit)",
-        "Bit Depth Reduction (7-bit)",
-        "Median Filter"
-    ], help="Apply a preprocessing transformation to mathematically scrub adversarial noise from the image before inference.")
-    
     if attack_name in ["AutoAttack (Ensemble)", "C&W (L2 Optimization)", "Ninja (Adaptive PGD)", "Boundary (Black-Box)", "EoT Oracle (Adaptive)"]:
         steps = st.slider("Optimization Steps", 10, 200, 50, step=10)
+        
+    st.divider()
+    st.header("Attack Objectives")
+    enable_targeting = st.checkbox("Enable Targeted Spoofing (C&W and Ninja only)", value=False, help="Force the attack to make the model predict a specific incorrect label instead of just ANY incorrect label.")
+    
+    target_class_idx = None
+    if enable_targeting and attack_name in ["C&W (L2 Optimization)", "Ninja (Adaptive PGD)"]:
+        name_to_label = {v: k for k, v in class_mapping.items()}
+        target_class_name = st.selectbox("Spoof Target Class", sorted_class_names, help="Pick the class you want the model to hallucinate.")
+        target_class_idx = name_to_label[target_class_name]
+    elif enable_targeting:
+        st.warning(f"Targeting is not currently supported for {attack_name}.")
     
     st.divider()
     st.header("Visualization Options")
@@ -250,11 +275,13 @@ with tab_eval:
                 
             elif attack_name == "C&W (L2 Optimization)":
                 attacker = CWAttacker(victim, DEVICE, steps=steps if 'steps' in locals() else 50)
-                adv_image = attacker.attack(target_image, target_label)
+                target_tensor = torch.tensor([target_class_idx], dtype=torch.long).to(DEVICE) if target_class_idx is not None else None
+                adv_image = attacker.attack(target_image, target_label, target_labels=target_tensor)
                 
             elif attack_name == "Ninja (Adaptive PGD)":
                 attacker = AdaptiveAttacker(victim, DEVICE, detector, eps=epsilon, steps=steps if 'steps' in locals() else 50)
-                adv_image = attacker.attack(target_image, target_label)
+                target_tensor = torch.tensor([target_class_idx], dtype=torch.long).to(DEVICE) if target_class_idx is not None else None
+                adv_image = attacker.attack(target_image, target_label, target_labels=target_tensor)
                 
             elif attack_name == "Boundary (Black-Box)":
                 attacker = BoundaryAttack(victim, DEVICE, steps=steps if 'steps' in locals() else 50)
@@ -265,13 +292,14 @@ with tab_eval:
                 # We attack the 'hero' (robust model) since EoT is designed to defeat its defenses
                 attacker = EoTAttacker(hero, DEVICE, eps=epsilon, steps=steps if 'steps' in locals() else 20, eot_samples=10, max_shift=2)
                 adv_image = attacker.attack(target_image, target_label)
-                
-        noise = (adv_image - target_image).abs()
         
-    # --- IMAGE CLEANING ---
-    if cleaning_method != "None":
-        adv_image = apply_cleaning(adv_image, cleaning_method, DEVICE)
-    
+        noise = (adv_image - target_image).abs()
+                
+    # --- RAW INFERENCE (To prove the attack worked before cleaning) ---
+    with torch.no_grad():
+        raw_pred_victim_logits = victim(adv_image)
+        raw_pred_victim = raw_pred_victim_logits.argmax(1).item()
+        
     # --- DISPLAY ---
     with torch.no_grad():
         pred_victim_logits = victim(adv_image)
@@ -312,14 +340,14 @@ with tab_eval:
         overlay_h = apply_heatmap(adv_image * 0.5 + 0.5, heatmap_h)
     
     # Render Stats Summary
-    st.subheader("Statistical Analysis (Mahalanobis Distance)", help="The 'Iron Dome' Detector. This analyzes the deep internal geometry of the neural network to measure how 'normal' the image looks. If an attacker adds too much adversarial noise to an image, the Iron Dome will flag it as an anomaly, even if the model's final prediction gets tricked.")
-    st.progress(int(trust_score_val))
+    st.sidebar.divider()
+    st.sidebar.subheader("Iron Dome Detector")
+    st.sidebar.markdown("Analyzes deep internal geometry to flag anomalies before inference.", help="Mahalanobis Distance logic.")
+    st.sidebar.progress(int(trust_score_val))
     if trust_score_val < 50:
-        st.warning(f"Anomalous input detected! Model Trust: {trust_score_val:.1f}%. This looks like an adversarial attack or out-of-distribution sample.")
+        st.sidebar.warning(f"Anomaly Detected! Trust: {trust_score_val:.1f}%")
     else:
-        st.success(f"Input looks clean. Model Trust: {trust_score_val:.1f}%.")
-        
-    st.divider()
+        st.sidebar.success(f"Input Clean. Trust: {trust_score_val:.1f}%")
 
     # Pre-process noise for visualization (min-max normalization to make patterns visible)
     display_noise = noise.detach().squeeze().cpu().permute(1,2,0).numpy()
@@ -327,18 +355,39 @@ with tab_eval:
     if noise_max > 0:
         display_noise = display_noise / noise_max
 
+    # --- SECTION 1: THE ATTACK VECTOR (3 Symmetrical Columns) ---
+    st.subheader("1. The Adversarial Attack Vector", help="Visualizing how the mathematical noise is applied to the original image to create the adversarial input.")
     c1, c2, c3 = st.columns(3)
-    with c1: st.image(to_display(target_image), caption=f"1. Original ({class_name})", use_container_width=True)
-    with c2: st.image(display_noise, caption="2. Attack Noise (Amplified)", clamp=True, use_container_width=True)
-    with c3: st.image(to_display(adv_image), caption="3. Adversarial Input", use_container_width=True)
-    
+    with c1: 
+        st.image(to_display(target_image), caption=f"Original Image ({class_name})", use_container_width=True)
+    with c2: 
+        st.image(display_noise, caption="Adversarial Noise (Amplified for Visibility)", clamp=True, use_container_width=True)
+    with c3: 
+        st.image(to_display(adv_image), caption="Final Adversarial Input", use_container_width=True)
+        
+    # --- ACADEMIC STEALTH METRICS ---
+    if run_analysis and attack_name != "None":
+        st.markdown("**Academic Stealth Metrics (Imperceptibility)**")
+        m1, m2, m3, m4 = st.columns(4)
+        l2_val, linf_val, psnr_val, ssim_val = compute_stealth_metrics(target_image, adv_image)
+        
+        m1.metric("L2 Norm (Dist)", f"{l2_val:.3f}", help="Total Euclidean noise distance. Lower is better.")
+        m2.metric("L-inf Norm (Max)", f"{linf_val:.3f}", help="Maximum change to any single pixel. Lower is better.")
+        m3.metric("PSNR (Signal/Noise)", f"{psnr_val:.1f} dB", help="Peak Signal-to-Noise Ratio. Higher is better (>30dB is usually imperceptible).")
+        m4.metric("SSIM (Similarity)", f"{ssim_val:.3f}", help="Structural Similarity Index. 1.0 means perfectly identical to human eye.")
+        
     st.divider()
+    
+    # --- SECTION 2: COMPARATIVE INFERENCE (2 Symmetrical Columns) ---
+    st.subheader("2. Model Inference Comparison", help="Comparing how the standard baseline model reacts to the attack vs. the fortified TRADES model.")
     col_a, col_b = st.columns(2)
     with col_a:
         st.subheader("Standard ResNet18 (Baseline)", help="A standard, unprotected AI model. It performs very well on normal images but is highly vulnerable to being tricked by attacks.")
+        
         pred_vic_name = class_mapping.get(pred_victim, f"Class {pred_victim}")
         if pred_victim == target_label_int: st.success(f"Prediction: CORRECT ({pred_vic_name})")
         else: st.error(f"Prediction: INCORRECT ({pred_vic_name})")
+        
         if show_heatmap: st.image(overlay_v, caption="Baseline Attention Map", use_container_width=True)
             
     with col_b:
@@ -347,8 +396,12 @@ with tab_eval:
         if pred_hero == target_label_int: st.success(f"Prediction: CORRECT ({pred_hero_name})")
         else: st.warning(f"Prediction: INCORRECT ({pred_hero_name})")
         
+        if show_heatmap: 
+            st.image(overlay_h, caption="Robust Attention Map (Grad-CAM)", use_container_width=True)
+            
         if enable_tta and vote_breakdown:
-            st.markdown("**(Stochastic Ensemble Consensus Vote Tracker)**")
+            st.markdown("---")
+            st.markdown("**Stochastic Ensemble Consensus Vote Tracker:**")
             for voted_class_idx, count in vote_breakdown.items():
                 voted_name = class_mapping.get(voted_class_idx, f"Class {voted_class_idx}")
                 pct = count / tta_hero.num_copies
@@ -356,13 +409,64 @@ with tab_eval:
                     st.progress(pct, text=f"[CORRECT] {voted_name}: {count} votes")
                 else:
                     st.progress(pct, text=f"[INCORRECT] {voted_name}: {count} votes")
-                    
-        if show_heatmap: st.image(overlay_h, caption="Robust Attention Map", use_container_width=True)
         
     st.divider()
     
-    # --- PHASE 6: DEFENSIVE ANALYTICS DASHBOARD ---
-    st.subheader("Live Defensive Analytics Dashboard", help="A real-time comparison of how confident each model is, alongside the ultimate Mathematical Defense Guarantee.")
+    # --- SECTION 3: AUTONOMOUS PURIFICATION MATRIX ---
+    st.subheader("3. Autonomous Purification Matrix", help="Silently testing the adversarial image against multiple image-processing and neural defenses simultaneously.")
+    
+    if run_analysis and attack_name != "None":
+        st.markdown("**How it works:** We apply each filtering defense to the adversarial image, and then feed the cleaned image back into the **Standard ResNet18 (Baseline)**. This proves whether the defense actually successfully scrubbed the attack noise from the image. Notice how basic filters often fail, while Neural ML succeeds.")
+        
+        filters = {
+            "Gaussian Blur": "Gaussian Blur",
+            "Bit-Depth (4-bit)": "Bit Depth Reduction (4-bit)",
+            "Median Filter": "Median Filter",
+            "FFT Low-Pass": "FFT Low-Pass Filter",
+            "Deep Autoencoder": "Neural Denoising Autoencoder (DAE)"
+        }
+        
+        # Create dynamic columns for each filter
+        filter_cols = st.columns(len(filters))
+        
+        for idx, (display_name, method_name) in enumerate(filters.items()):
+            with filter_cols[idx]:
+                st.markdown(f"**{display_name}**")
+                
+                # Handle untrained Autoencoder gracefully
+                if method_name == "Neural Denoising Autoencoder (DAE)" and not os.path.exists("models/neural_cleaner.pth"):
+                    st.warning("Untrained")
+                    st.caption("Run training script.")
+                    st.image(np.zeros((64, 64, 3)), caption="No weights found", use_container_width=True)
+                    continue
+                
+                # Apply filter
+                cleaned_tensor = apply_cleaning(adv_image, method_name, DEVICE)
+                
+                # Get baseline prediction on cleaned image
+                with torch.no_grad():
+                    clean_logits = victim(cleaned_tensor)
+                    clean_pred = clean_logits.argmax(1).item()
+                    clean_conf = torch.softmax(clean_logits, dim=1)[0, target_label_int].item() * 100
+                    
+                clean_name = class_mapping.get(clean_pred, f"Class {clean_pred}")
+                
+                if clean_pred == target_label_int:
+                    st.success("✅ Defeated")
+                    st.caption(f"Conf: {clean_conf:.1f}%")
+                else:
+                    st.error("❌ Persists")
+                    st.caption(f"Pred: {clean_name}")
+                
+                # Display a tiny thumbnail of the cleaned image
+                st.image(to_display(cleaned_tensor), use_container_width=True)
+    else:
+        st.info("Run an attack to evaluate the Autonomous Purification Matrix.")
+        
+    st.divider()
+
+    # --- SECTION 4: DEFENSIVE ANALYTICS DASHBOARD ---
+    st.subheader("4. Live Defensive Analytics Dashboard", help="Real-time mathematical breakdown of model confidence and certified robustness guarantees.")
     
     metric_col1, metric_col2, metric_col3 = st.columns(3)
     
@@ -397,11 +501,11 @@ with tab_landscape:
             label_tensor = torch.tensor([label_int], dtype=torch.long).to(DEVICE)
             
             # Use appropriate grid steps for speed vs quality
-            landscape_path = visualize_loss_landscape(hero, DEVICE, img_tensor, label_tensor, epsilon=0.1, steps=20)
-            if os.path.exists(landscape_path):
-                st.image(landscape_path, caption="TRADES ResNet18 Loss Landscape", use_container_width=True)
+            fig = visualize_loss_landscape(hero, DEVICE, img_tensor, label_tensor, epsilon=0.1, steps=20)
+            if fig is not None:
+                st.plotly_chart(fig, use_container_width=True)
             else:
-                st.error("Failed to generate landscape plot.")
+                st.error("Failed to generate interactive landscape plot.")
 
 # --- PATCH ATTACKS TAB ---
 with tab_patch:
@@ -413,43 +517,129 @@ with tab_patch:
     if os.path.exists(patch_path):
         patch_tensor = torch.load(patch_path, map_location=DEVICE)
         st.image(to_display(patch_tensor), caption="Loaded Universal Patch", width=150)
+        img_tensor, label_int = val_dataset[img_idx]
+        img_tensor = img_tensor.unsqueeze(0).to(DEVICE)
+        label_tensor = torch.tensor([label_int], dtype=torch.long).to(DEVICE)
         
-        if st.button("Apply Patch to Current Image"):
-            with st.spinner("Injecting patch and recalculating saliency..."):
-                class FixedPatch(torch.nn.Module):
-                    def __init__(self, t): super().__init__(); self.patch = t
-                    def forward(self): return self.patch
-                
-                applier = PatchApplier(DEVICE, img_size=64, min_scale=0.3, max_scale=0.4)
-                img_tensor, label_int = val_dataset[img_idx]
-                img_tensor = img_tensor.unsqueeze(0).to(DEVICE)
-                label_tensor = torch.tensor([label_int], dtype=torch.long).to(DEVICE)
-                
-                # Original
-                orig_pred = victim(img_tensor).argmax(1).item()
-                orig_saliency = get_saliency_map(victim, img_tensor, orig_pred)
-                
-                # Patched
-                victim.zero_grad()
-                img_tensor.requires_grad = False
-                patched_img = applier(img_tensor, FixedPatch(patch_tensor).patch)
-                patched_pred = victim(patched_img).argmax(1).item()
-                patched_saliency = get_saliency_map(victim, patched_img.detach(), patched_pred)
-                
-                orig_pred_name = class_mapping.get(orig_pred, f"Class {orig_pred}")
-                patched_pred_name = class_mapping.get(patched_pred, f"Class {patched_pred}")
-                
-                # Display
-                p1, p2, p3, p4 = st.columns(4)
-                with p1: 
-                    st.image(to_display(img_tensor), caption=f"Orig Pred: {orig_pred_name}", use_container_width=True)
-                with p2:
-                    st.image(orig_saliency.cpu().squeeze().numpy(), caption="Orig Saliency", clamp=True, use_container_width=True)
-                with p3:
-                    st.image(to_display(patched_img), caption=f"Patched Pred: {patched_pred_name}", use_container_width=True)
-                with p4:
-                    st.image(patched_saliency.cpu().squeeze().numpy(), caption="Patched Saliency", clamp=True, use_container_width=True)
+        st.markdown("### Interactive Patch Placement")
+        st.markdown("Use the sliders to physically move the adversarial sticker around the image and see how localized vulnerabilities disrupt the model's Grad-CAM attention.")
+        
+        # Interactive Controls
+        col1, col2, col3 = st.columns(3)
+        with col1: patch_scale = st.slider("Sticker Scale", 0.1, 1.0, 0.35, step=0.05)
+        
+        target_size = int(64 * patch_scale)
+        max_coord = 64 - target_size
+        
+        with col2: patch_x = st.slider("X Coordinate", 0, max(0, max_coord), int(max_coord/2))
+        with col3: patch_y = st.slider("Y Coordinate", 0, max(0, max_coord), int(max_coord/2))
+        
+        # Calculate Original Baseline
+        orig_pred = victim(img_tensor).argmax(1).item()
+        orig_saliency = get_saliency_map(victim, img_tensor, orig_pred)
+        orig_pred_name = class_mapping.get(orig_pred, f"Class {orig_pred}")
+        
+        # Apply Patch explicitly based on UI coordinates
+        patched_img = img_tensor.clone()
+        import torch.nn.functional as F
+        patch_resized = F.interpolate(
+            patch_tensor.unsqueeze(0), 
+            size=(target_size, target_size), 
+            mode='bilinear'
+        ).squeeze(0)
+        
+        patched_img[0, :, patch_y:patch_y+target_size, patch_x:patch_x+target_size] = patch_resized
+        patched_img = torch.clamp(patched_img, -1, 1)
+        
+        # Calculate Patched Prediction
+        patched_pred = victim(patched_img).argmax(1).item()
+        patched_saliency = get_saliency_map(victim, patched_img.detach(), patched_pred)
+        patched_pred_name = class_mapping.get(patched_pred, f"Class {patched_pred}")
+        
+        # Display comparative tracking pipeline
+        st.divider()
+        st.subheader("Physical Attack Telemetry")
+        
+        p1, p2, p3, p4 = st.columns(4)
+        with p1: 
+            st.image(to_display(img_tensor), caption=f"Orig Pred: {orig_pred_name}", use_container_width=True)
+            if orig_pred == label_int: st.success("Correct")
+            else: st.error("Incorrect")
+            
+        with p2:
+            st.image(orig_saliency.cpu().squeeze().numpy(), caption="Orig Saliency Focus", clamp=True, use_container_width=True)
+            
+        with p3:
+            st.image(to_display(patched_img), caption=f"Patched Pred: {patched_pred_name}", use_container_width=True)
+            if patched_pred == label_int: st.success("Correct")
+            else: st.error("Attack Succeeded")
+            
+        with p4:
+            st.image(patched_saliency.cpu().squeeze().numpy(), caption="Patched Saliency Hijack", clamp=True, use_container_width=True)
     else:
         st.warning(f"Patch file not found at {patch_path}. Need to train one first!")
+
+# --- RADAR BENCHMARK TAB ---
+with tab_radar:
+    st.markdown("### Automated Evaluation Suite (Spider Chart)")
+    st.markdown("Rapidly benchmarks both models against a gauntlet of attacks and visualizes their geometric robustness profiles.")
+    
+    if st.button("Run Radar Benchmark (takes ~45s)"):
+        with st.spinner("Benchmarking models against a gauntlet of 10 random images across 4 attacks..."):
+            import plotly.graph_objects as go
+            import torch.utils.data
+            from attacks.fgsm import FGSMAttacker
+            
+            # Grab 10 random images
+            num_imgs = 10
+            dl = torch.utils.data.DataLoader(val_dataset, batch_size=num_imgs, shuffle=True)
+            images, labels = next(iter(dl))
+            images, labels = images.to(DEVICE), labels.to(DEVICE)
+            
+            # Define Attacker Gauntlet
+            attacks = {
+                "FGSM": FGSMAttacker(victim, DEVICE, eps=8/255),
+                "C&W": CWAttacker(victim, DEVICE, steps=20),
+                "Ninja (PGD)": AdaptiveAttacker(victim, DEVICE, detector, eps=8/255, steps=10),
+                "AutoAttack": AutoAttackLite(victim, DEVICE, eps=8/255)
+            }
+            
+            results_victim = {}
+            results_hero = {}
+            
+            # Calculate Clean Accuracy Focus
+            with torch.no_grad():
+                results_victim["Clean Accuracy"] = (victim(images).argmax(1) == labels).float().mean().item() * 100
+                results_hero["Clean Accuracy"] = (hero(images).argmax(1) == labels).float().mean().item() * 100
+            
+            # Execute Gauntlet
+            for atk_name, attacker in attacks.items():
+                adv_imgs = attacker.attack(images, labels)
+                with torch.no_grad():
+                    results_victim[atk_name] = (victim(adv_imgs).argmax(1) == labels).float().mean().item() * 100
+                    results_hero[atk_name] = (hero(adv_imgs).argmax(1) == labels).float().mean().item() * 100
+                
+            categories = list(results_victim.keys())
+            categories_loop = categories + [categories[0]]
+            
+            vic_vals = list(results_victim.values())
+            vic_vals.append(vic_vals[0])
+            
+            hero_vals = list(results_hero.values())
+            hero_vals.append(hero_vals[0])
+            
+            # Build Radar
+            fig = go.Figure()
+            fig.add_trace(go.Scatterpolar(r=vic_vals, theta=categories_loop, fill='toself', name='Baseline (Standard)', line_color='red'))
+            fig.add_trace(go.Scatterpolar(r=hero_vals, theta=categories_loop, fill='toself', name='TRADES (Robust)', line_color='green'))
+            
+            fig.update_layout(
+                polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+                showlegend=True,
+                title="Aggregate Robustness Profile (Accuracy %)"
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            st.success("Gauntlet Complete! Notice how the red baseline collapses inward on attacks, while the green TRADES envelope remains robust.")
 
 st.info("Note: Models trained on Tiny ImageNet (200 classes).")

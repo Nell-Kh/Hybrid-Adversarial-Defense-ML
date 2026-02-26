@@ -32,9 +32,11 @@ class AdaptiveAttacker(Attacker):
         self.steps = steps
         self.lambda_param = lambda_param # Importance of staying hidden
         
-    def attack(self, images, labels):
+    def attack(self, images, labels, target_labels=None):
         images = images.clone().detach().to(self.device)
         labels = labels.to(self.device)
+        if target_labels is not None:
+            target_labels = target_labels.to(self.device)
         
         # Random Start
         adv_images = images + torch.empty_like(images).uniform_(-self.eps, self.eps)
@@ -50,7 +52,12 @@ class AdaptiveAttacker(Attacker):
             
             # 1. Model Loss (Fool the classifier)
             outputs = self.model(adv_images)
-            model_loss = loss_fn(outputs, labels)
+            if target_labels is None:
+                # UNTARGETED: Maximize error on true label
+                model_loss = loss_fn(outputs, labels)
+            else:
+                # TARGETED: Minimize error on target label (So we maximize the negative loss)
+                model_loss = -loss_fn(outputs, target_labels)
             
             # 2. Detector Loss (Fool the Iron Dome)
             # We want to MINIMIZE the Mahalanobis distance (look normal)
@@ -58,7 +65,7 @@ class AdaptiveAttacker(Attacker):
             anomaly_score = self.detector.calc_torch_score(adv_images)
             
             # Combined Objective
-            # We want to maximize Model Loss (Error)
+            # We want to maximize Model Loss (Error) or minimize Target Loss (Spoof)
             # We want to minimize Anomaly Score (Detection) -> Maximize (-Score)
             total_loss = model_loss - (self.lambda_param * anomaly_score)
             
