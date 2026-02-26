@@ -5,3 +5,4 @@ tqdm
 requests
 matplotlib
 scikit-learn
+statsmodels>=0.14

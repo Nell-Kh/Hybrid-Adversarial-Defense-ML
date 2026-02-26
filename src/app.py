@@ -110,6 +110,20 @@ def load_class_mapping():
 
 # --- UI ---
 st.title("Adversarial Robustness Evaluation")
+
+with st.expander("Overview: Adversarial Machine Learning Framework"):
+    st.markdown("""
+    **Welcome to the Adversarial Machine Learning Dashboard!**
+    
+    This platform demonstrates how AI Vision Models can be easily tricked by invisible "noise" (Adversarial Attacks), 
+    and how we can use advanced mathematical algorithms to defend them.
+    
+    *   **The Attacker's Goal**: Add microscopic pixel changes to an image so the AI confidently misclassifies it (e.g., seeing a dog as an airplane).
+    *   **The Defender's Goal**: Build "Robust" models that can ignore this noise, or add statistical detectors to catch the attacks in real-time.
+    
+    Use the **Evaluation Controls** on the left to select an image, pick an attack algorithm, and watch the AI systems battle it out!
+    """)
+
 st.markdown("### Comparative Analysis: Standard ResNet18 vs. TRADES-Robust ResNet18")
 
 # Create Tabs
@@ -298,7 +312,7 @@ with tab_eval:
         overlay_h = apply_heatmap(adv_image * 0.5 + 0.5, heatmap_h)
     
     # Render Stats Summary
-    st.subheader("Statistical Analysis (Mahalanobis Distance)")
+    st.subheader("Statistical Analysis (Mahalanobis Distance)", help="The 'Iron Dome' Detector. This analyzes the deep internal geometry of the neural network to measure how 'normal' the image looks. If an attacker adds too much adversarial noise to an image, the Iron Dome will flag it as an anomaly, even if the model's final prediction gets tricked.")
     st.progress(int(trust_score_val))
     if trust_score_val < 50:
         st.warning(f"Anomalous input detected! Model Trust: {trust_score_val:.1f}%. This looks like an adversarial attack or out-of-distribution sample.")
@@ -321,14 +335,14 @@ with tab_eval:
     st.divider()
     col_a, col_b = st.columns(2)
     with col_a:
-        st.subheader("Standard ResNet18 (Baseline)")
+        st.subheader("Standard ResNet18 (Baseline)", help="A standard, unprotected AI model. It performs very well on normal images but is highly vulnerable to being tricked by attacks.")
         pred_vic_name = class_mapping.get(pred_victim, f"Class {pred_victim}")
         if pred_victim == target_label_int: st.success(f"Prediction: CORRECT ({pred_vic_name})")
         else: st.error(f"Prediction: INCORRECT ({pred_vic_name})")
         if show_heatmap: st.image(overlay_v, caption="Baseline Attention Map", use_container_width=True)
             
     with col_b:
-        st.subheader("TRADES ResNet18 (Robust)")
+        st.subheader("TRADES ResNet18 (Robust)", help="A fortified AI model defended via TRADES (Tradeoff-inspired Adversarial Defense). It fundamentally restructures its own neural pathways during training to resist malicious adversarial vectors.")
         pred_hero_name = class_mapping.get(pred_hero, f"Class {pred_hero}")
         if pred_hero == target_label_int: st.success(f"Prediction: CORRECT ({pred_hero_name})")
         else: st.warning(f"Prediction: INCORRECT ({pred_hero_name})")
@@ -339,31 +353,31 @@ with tab_eval:
                 voted_name = class_mapping.get(voted_class_idx, f"Class {voted_class_idx}")
                 pct = count / tta_hero.num_copies
                 if voted_class_idx == target_label_int:
-                    st.progress(pct, text=f"✅ {voted_name}: {count} votes")
+                    st.progress(pct, text=f"[CORRECT] {voted_name}: {count} votes")
                 else:
-                    st.progress(pct, text=f"❌ {voted_name}: {count} votes")
+                    st.progress(pct, text=f"[INCORRECT] {voted_name}: {count} votes")
                     
         if show_heatmap: st.image(overlay_h, caption="Robust Attention Map", use_container_width=True)
         
     st.divider()
     
     # --- PHASE 6: DEFENSIVE ANALYTICS DASHBOARD ---
-    st.subheader("Live Defensive Analytics Dashboard")
+    st.subheader("Live Defensive Analytics Dashboard", help="A real-time comparison of how confident each model is, alongside the ultimate Mathematical Defense Guarantee.")
     
     metric_col1, metric_col2, metric_col3 = st.columns(3)
     
     with metric_col1:
-        st.markdown("**1. Standard Baseline Confidence**")
+        st.markdown("**1. Standard Baseline Confidence**", help="How confident the unprotected AI is about the correct answer. Attacks will easily crush this percentage to 0%.")
         baseline_pct = torch.softmax(pred_victim_logits, dim=1)[0, target_label_int].item() * 100
         st.progress(int(baseline_pct), text=f"Target Class Confidence: {baseline_pct:.1f}%")
         
     with metric_col2:
-        st.markdown("**2. TRADES Robust Confidence**")
+        st.markdown("**2. TRADES Robust Confidence**", help="How confident the Defended AI is. Because it trains heavily against attacks, it sacrifices some baseline confidence for much higher resistance under fire.")
         robust_pct = torch.softmax(pred_hero_logits, dim=1)[0, target_label_int].item() * 100
         st.progress(int(robust_pct), text=f"Target Class Confidence: {robust_pct:.1f}%")
         
     with metric_col3:
-        st.markdown("**3. Certified Mathematical Radius**")
+        st.markdown("**3. Certified Mathematical Radius**", help="The Holy Grail of AI defense. This uses 'Randomized Smoothing' to mathematically PROVE that absolutely NO ATTACK with an intensity lower than 'Radius (R)' can ever trick the model. It is a 100% guarantee.")
         if cert_radius > 0.0:
             st.success(f"**Radius (R)**: {cert_radius:.3f} | **pA**: {cert_prob:.2f}")
             st.caption(f"Guaranteed Safe against any attack with L2 norm < {cert_radius:.3f}.")
