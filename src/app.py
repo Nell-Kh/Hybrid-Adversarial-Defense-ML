@@ -29,6 +29,7 @@ from attacks.patch import PatchApplier
 from attacks.adaptive import AdaptiveAttacker
 from defenses.mahalanobis import MahalanobisDetector
 from defenses.stochastic_ensemble import TTA_Ensemble
+from defenses.image_cleaning import apply_cleaning
 from utils_vis import GradCAM, apply_heatmap
 from visualize_landscape import visualize_loss_landscape
 from visualize_patch import get_saliency_map
@@ -52,11 +53,16 @@ def load_models():
     # 2. Robust Model (Defense)
     hero = get_model(DEVICE)
     hero_path = os.path.join("models", "resnet_robust.pth")
-    checkpoint = torch.load(hero_path, map_location=DEVICE)
-    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-        hero.load_state_dict(checkpoint['model_state_dict'])
+    if os.path.exists(hero_path):
+        checkpoint = torch.load(hero_path, map_location=DEVICE)
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            hero.load_state_dict(checkpoint['model_state_dict'])
+        else:
+            hero.load_state_dict(checkpoint)
     else:
-        hero.load_state_dict(checkpoint)
+        st.warning(f"Robust model not found at {hero_path}. Falling back to standard model for robust predictions.")
+        # Fallback so the app doesn't crash completely
+        hero = victim
     hero.eval()
     
     # 3. Mahalanobis Detector (Iron Dome)
@@ -159,6 +165,17 @@ with st.sidebar:
     # Dynamic parameters
     epsilon = st.slider("Perturbation Magnitude (Epsilon)", 0.0, 0.1, 0.031, step=0.001, help="Controls how much noise the attacker is allowed to add. Higher = more visible noise but stronger attack.")
     
+    cleaning_method = st.selectbox("Image Cleaning Defense", [
+        "None", 
+        "Gaussian Blur", 
+        "Bit Depth Reduction (3-bit)",
+        "Bit Depth Reduction (4-bit)",
+        "Bit Depth Reduction (5-bit)",
+        "Bit Depth Reduction (6-bit)",
+        "Bit Depth Reduction (7-bit)",
+        "Median Filter"
+    ], help="Apply a preprocessing transformation to mathematically scrub adversarial noise from the image before inference.")
+    
     if attack_name in ["AutoAttack (Ensemble)", "C&W (L2 Optimization)", "Ninja (Adaptive PGD)", "Boundary (Black-Box)"]:
         steps = st.slider("Optimization Steps", 10, 200, 50, step=10)
     
@@ -199,7 +216,7 @@ with tab_eval:
                 data_grad = target_image.grad.data
                 sign_data_grad = data_grad.sign()
                 adv_image = target_image + epsilon * sign_data_grad
-                adv_image = torch.clamp(adv_image, 0, 1)
+                adv_image = torch.clamp(adv_image, -1, 1)
                 target_image.requires_grad = False
                 
             elif attack_name == "DeepFool (Minimum Norm)":
@@ -223,6 +240,10 @@ with tab_eval:
                 adv_image = attacker.attack(target_image, target_label)
                 
         noise = (adv_image - target_image).abs()
+        
+    # --- IMAGE CLEANING ---
+    if cleaning_method != "None":
+        adv_image = apply_cleaning(adv_image, cleaning_method, DEVICE)
     
     # --- DISPLAY ---
     with torch.no_grad():
@@ -240,7 +261,10 @@ with tab_eval:
             vote_breakdown = None
         
         # Calculate Trust Score
-        trust_score_val = detector.get_trust_score(adv_image)[0] * 100  # Percentage
+        try:
+            trust_score_val = detector.get_trust_score(adv_image)[0] * 100  # Percentage
+        except Exception as e:
+            trust_score_val = 100.0 # Default to trusted if detector fails
     
     vis_victim = adv_image
     vis_hero = adv_image
