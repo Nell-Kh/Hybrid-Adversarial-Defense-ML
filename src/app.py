@@ -27,9 +27,11 @@ from attacks.boundary import BoundaryAttack
 from attacks.cw import CWAttacker
 from attacks.patch import PatchApplier
 from attacks.adaptive import AdaptiveAttacker
+from attacks.eot import EoTAttacker
 from defenses.mahalanobis import MahalanobisDetector
 from defenses.stochastic_ensemble import TTA_Ensemble
 from defenses.image_cleaning import apply_cleaning
+from defenses.certified_robustness import CertifiedRobustness
 from utils_vis import GradCAM, apply_heatmap
 from visualize_landscape import visualize_loss_landscape
 from visualize_patch import get_saliency_map
@@ -73,7 +75,11 @@ def load_models():
     # Wraps the robust model to provide Test-Time Augmentation defenses
     tta_hero = TTA_Ensemble(hero, num_copies=10, max_shift=2, noise_std=0.02)
     
-    return victim, hero, tta_hero, detector
+    # 5. Certified Robustness Evaluator (Mathematical Guarantees)
+    # n=50 for speed in UI, normally n=10,000 for academic papers
+    certifier = CertifiedRobustness(hero, DEVICE, noise_std=0.1, n0=10, n=50)
+    
+    return victim, hero, tta_hero, detector, certifier
 
 @st.cache_resource
 def get_val_dataset():
@@ -109,7 +115,7 @@ st.markdown("### Comparative Analysis: Standard ResNet18 vs. TRADES-Robust ResNe
 # Create Tabs
 tab_eval, tab_landscape, tab_patch = st.tabs(["Evaluation & Defense", "Loss Landscape", "Patch Attacks"])
 
-victim, hero, tta_hero, detector = load_models()
+victim, hero, tta_hero, detector, certifier = load_models()
 val_dataset = get_val_dataset()
 labels = val_dataset.targets # List of 10,000 integers
 class_mapping = load_class_mapping()
@@ -159,7 +165,8 @@ with st.sidebar:
         "AutoAttack (Ensemble)", 
         "C&W (L2 Optimization)",
         "Ninja (Adaptive PGD)",
-        "Boundary (Black-Box)"
+        "Boundary (Black-Box)",
+        "EoT Oracle (Adaptive)"
     ])
     
     # Dynamic parameters
@@ -176,7 +183,7 @@ with st.sidebar:
         "Median Filter"
     ], help="Apply a preprocessing transformation to mathematically scrub adversarial noise from the image before inference.")
     
-    if attack_name in ["AutoAttack (Ensemble)", "C&W (L2 Optimization)", "Ninja (Adaptive PGD)", "Boundary (Black-Box)"]:
+    if attack_name in ["AutoAttack (Ensemble)", "C&W (L2 Optimization)", "Ninja (Adaptive PGD)", "Boundary (Black-Box)", "EoT Oracle (Adaptive)"]:
         steps = st.slider("Optimization Steps", 10, 200, 50, step=10)
     
     st.divider()
@@ -239,6 +246,12 @@ with tab_eval:
                 attacker = BoundaryAttack(victim, DEVICE, steps=steps if 'steps' in locals() else 50)
                 adv_image = attacker.attack(target_image, target_label)
                 
+            elif attack_name == "EoT Oracle (Adaptive)":
+                st.warning("The Oracle is actively simulating realities to defeat the Stochastic Ensemble...")
+                # We attack the 'hero' (robust model) since EoT is designed to defeat its defenses
+                attacker = EoTAttacker(hero, DEVICE, eps=epsilon, steps=steps if 'steps' in locals() else 20, eot_samples=10, max_shift=2)
+                adv_image = attacker.attack(target_image, target_label)
+                
         noise = (adv_image - target_image).abs()
         
     # --- IMAGE CLEANING ---
@@ -259,6 +272,13 @@ with tab_eval:
             pred_hero_logits = hero(adv_image)
             pred_hero = pred_hero_logits.argmax(1).item()
             vote_breakdown = None
+            
+        # Calculate Certified Robustness
+        if run_analysis:
+            with st.spinner("Calculating Certified Smoothing Radius..."):
+                cert_class, cert_radius, cert_prob = certifier.certify(adv_image)
+        else:
+            cert_class, cert_radius, cert_prob = -1, 0.0, 0.0
         
         # Calculate Trust Score
         try:
@@ -324,6 +344,32 @@ with tab_eval:
                     st.progress(pct, text=f"❌ {voted_name}: {count} votes")
                     
         if show_heatmap: st.image(overlay_h, caption="Robust Attention Map", use_container_width=True)
+        
+    st.divider()
+    
+    # --- PHASE 6: DEFENSIVE ANALYTICS DASHBOARD ---
+    st.subheader("Live Defensive Analytics Dashboard")
+    
+    metric_col1, metric_col2, metric_col3 = st.columns(3)
+    
+    with metric_col1:
+        st.markdown("**1. Standard Baseline Confidence**")
+        baseline_pct = torch.softmax(pred_victim_logits, dim=1)[0, target_label_int].item() * 100
+        st.progress(int(baseline_pct), text=f"Target Class Confidence: {baseline_pct:.1f}%")
+        
+    with metric_col2:
+        st.markdown("**2. TRADES Robust Confidence**")
+        robust_pct = torch.softmax(pred_hero_logits, dim=1)[0, target_label_int].item() * 100
+        st.progress(int(robust_pct), text=f"Target Class Confidence: {robust_pct:.1f}%")
+        
+    with metric_col3:
+        st.markdown("**3. Certified Mathematical Radius**")
+        if cert_radius > 0.0:
+            st.success(f"**Radius (R)**: {cert_radius:.3f} | **pA**: {cert_prob:.2f}")
+            st.caption(f"Guaranteed Safe against any attack with L2 norm < {cert_radius:.3f}.")
+        else:
+            st.error("Model too uncertain to guarantee safety.")
+            st.caption("No mathematical guarantee exists for this input.")
 
 # --- LOSS LANDSCAPE TAB ---
 with tab_landscape:
