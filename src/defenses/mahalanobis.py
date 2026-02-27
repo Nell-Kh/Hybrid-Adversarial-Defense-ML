@@ -21,7 +21,7 @@ from src.dataset import get_dataloaders
 
 class MahalanobisDetector:
     """
-    The 'Iron Dome': Multi-Layer Mahalanobis Detector (NeurIPS 2018).
+    The 'Mahalanobis': Multi-Layer Mahalanobis Detector (NeurIPS 2018).
     Checks anomalies at 5 different layers of ResNet.
     """
     def __init__(self, model, device):

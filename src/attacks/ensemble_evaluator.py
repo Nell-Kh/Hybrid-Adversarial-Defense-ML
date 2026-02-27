@@ -106,13 +106,13 @@ if __name__ == "__main__":
     import os
     
     device = config.DEVICE
-    victim = get_model(device)
-    victim_path = os.path.join(config.MODEL_DIR, "resnet_tinyimagenet.pth")
-    victim.load_state_dict(torch.load(victim_path, map_location=device))
+    Standard = get_model(device)
+    Standard_path = os.path.join(config.MODEL_DIR, "resnet_tinyimagenet.pth")
+    Standard.load_state_dict(torch.load(Standard_path, map_location=device))
     
     _, val_loader = get_dataloaders(batch_size=16)
     
-    evaluator = EnsembleEvaluator(victim, device, steps=20)
+    evaluator = EnsembleEvaluator(Standard, device, steps=20)
     res = evaluator.evaluate(val_loader, num_batches=2)
     
     print("\n=== Ensemble Evaluation Results ===")

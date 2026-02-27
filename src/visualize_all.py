@@ -93,7 +93,7 @@ def visualize_all():
     ax_noise.axis('off')
     
     # Text info
-    ax_text.text(0.1, 0.5, "Baseline Image", fontsize=14)
+    ax_text.text(0.1, 0.5, "standard Image", fontsize=14)
     ax_text.axis('off')
     
     # Rows 1..N: Attacks

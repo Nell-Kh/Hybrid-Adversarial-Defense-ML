@@ -14,7 +14,7 @@ from src.attacks.base import Attacker
 
 class CWAttacker(Attacker):
     """
-    Carlini-Wagner (C&W) L2 Attack (The Sniper).
+    Carlini-Wagner (C&W) L2 Attack (The cw l2).
     
     Paper: "Towards Evaluating the Robustness of Neural Networks" (2017)
     
@@ -40,9 +40,11 @@ class CWAttacker(Attacker):
         self.steps = steps
         self.lr = lr
 
-    def attack(self, images, labels):
+    def attack(self, images, labels, target_labels=None):
         images = images.clone().detach().to(self.device)
         labels = labels.to(self.device)
+        if target_labels is not None:
+            target_labels = target_labels.to(self.device)
         
         # C&W uses a "Change of Variable" to handle the box constraints [-1, 1]
         # Instead of optimizing 'delta', we optimize 'w'.
@@ -57,7 +59,7 @@ class CWAttacker(Attacker):
         best_adv_images = images.clone().detach()
         best_l2 = float('inf') * torch.ones(images.size(0)).to(self.device)
         
-        print(f"Running CW Attack (Steps={self.steps}, c={self.c})...")
+        # print(f"Running CW Attack (Steps={self.steps}, c={self.c})...")
         
         for step in range(self.steps):
             # 1. Forward Pass
@@ -73,23 +75,24 @@ class CWAttacker(Attacker):
             # B) Classification Loss (Force wrong label)
             outputs = self.model(adv_images)
             
-            # Extract score of the TRUE class
-            # gather works by selecting the element at index 'labels'
-            real_score = torch.gather(outputs, 1, labels.unsqueeze(1)).squeeze(1)
-            
-            # Extract score of the max OTHER class (Target)
-            # We mask out the true label to find the max of the modifyers
-            # Simple trick: subtract a huge number from true class index so it's never max
-            tmp_outputs = outputs.clone()
-            one_hot_labels = torch.nn.functional.one_hot(labels, num_classes=outputs.shape[1])
-            tmp_outputs = tmp_outputs - one_hot_labels * 10000.0
-            other_score, _ = torch.max(tmp_outputs, dim=1)
-            
-            # f(x) = max(Real - Other, -Kappa)
-            # If Real > Other, result is positive (we want to minimize this).
-            # If Real < Other (Attack Success), result is negative.
-            # Kappa forces it to be "Very" successful.
-            f_loss = torch.clamp(real_score - other_score + self.kappa, min=0)
+            if target_labels is None:
+                # UNTARGETED: We want real class to drop below the next highest class
+                real_score = torch.gather(outputs, 1, labels.unsqueeze(1)).squeeze(1)
+                tmp_outputs = outputs.clone()
+                one_hot_labels = torch.nn.functional.one_hot(labels, num_classes=outputs.shape[1])
+                tmp_outputs = tmp_outputs - one_hot_labels * 10000.0
+                other_score, _ = torch.max(tmp_outputs, dim=1)
+                # Maximize other_score, minimize real_score
+                f_loss = torch.clamp(real_score - other_score + self.kappa, min=0)
+            else:
+                # TARGETED: We want the target class to be higher than ANY other class
+                target_score = torch.gather(outputs, 1, target_labels.unsqueeze(1)).squeeze(1)
+                tmp_outputs = outputs.clone()
+                one_hot_targets = torch.nn.functional.one_hot(target_labels, num_classes=outputs.shape[1])
+                tmp_outputs = tmp_outputs - one_hot_targets * 10000.0
+                other_score, _ = torch.max(tmp_outputs, dim=1)
+                # Maximize target_score, minimize other_score
+                f_loss = torch.clamp(other_score - target_score + self.kappa, min=0)
             
             # Total Loss
             cost = l2_dist + self.c * f_loss
@@ -99,10 +102,13 @@ class CWAttacker(Attacker):
             optimizer.step()
             
             # 3. Save Best Result
-            # We track the best successful attack causing minimal L2 distance found so far
             with torch.no_grad():
                 pred = outputs.argmax(1)
-                mask_success = (pred != labels) # True if attack succeeded
+                
+                if target_labels is None:
+                    mask_success = (pred != labels) # True if untargeted attack succeeded
+                else:
+                    mask_success = (pred == target_labels) # True if targeted attack succeeded
                 
                 # Update if successful AND lower L2 distance than before
                 update_idx = mask_success & (l2_dist < best_l2)
@@ -127,7 +133,7 @@ if __name__ == "__main__":
     images, labels = next(iter(train_loader))
     
     # Attack
-    print("\n--- Testing Carlini-Wagner (The Sniper) ---")
+    print("\n--- Testing Carlini-Wagner (The cw l2) ---")
     attacker = CWAttacker(model, device, steps=100, c=1.0)
     adv_imgs = attacker.attack(images, labels)
     

@@ -44,8 +44,6 @@ class DeepFool(Attacker):
         
         adv_images = images.clone()
         
-        print("Running DeepFool (Finding shortest path to error)...")
-        
         for b in range(batch_size):
             image = images[b:b+1].requires_grad_()
             original_label = labels[b].item()
@@ -102,7 +100,6 @@ class DeepFool(Attacker):
                 
                 # 3. Accumulated the Perturbation
                 if min_pert == float('inf'):
-                    print(f"    Warning: Gradients are flat for label {original_label}. Adding STRONG random jitter.")
                     r_i = torch.randn_like(image).to(self.device) * 0.1
                 elif best_w is not None:
                     # Direction = best_w / norm
@@ -121,13 +118,6 @@ class DeepFool(Attacker):
                 # 5. Check prediction again
                 outputs = self.model(pert_image)
                 _, current_label = torch.max(outputs, 1)
-                
-                # [EXPLAINER LOGGING]
-                if b == 0: # Only print for the first image to avoid spam
-                    print(f"  Iteration {i}: Label {original_label} -> {current_label.item()}")
-                    if best_w is not None:
-                        print(f"    Nearest Class: {outputs.argmax(1).item()} | Distance to Boundary: {min_pert:.6f}")
-                        print(f"    Step Size: {torch.norm(r_i):.6f}")
                 
                 if current_label != original_label:
                     # We crossed the boundary!

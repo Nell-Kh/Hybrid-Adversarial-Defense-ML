@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+import plotly.graph_objects as go
 import sys
 import os
 
@@ -51,22 +50,24 @@ def visualize_loss_landscape(model, device, image, label, epsilon=8/255, steps=5
                 loss = criterion(output, label)
                 Z[i, j] = loss.item()
                 
-    # Plotting
-    print("Plotting...")
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    surf = ax.plot_surface(X, Y, Z, cmap='viridis', linewidth=0, antialiased=False)
+    # Plotly 3D Surface
+    print("Generating Interactive Plotly Surface...")
+    fig = go.Figure(data=[go.Surface(z=Z, x=X, y=Y, colorscale='Viridis')])
     
-    ax.set_title(f'Loss Landscape around Image (Epsilon={epsilon:.3f})')
-    ax.set_xlabel('Direction 1')
-    ax.set_ylabel('Direction 2')
-    ax.set_zlabel('Loss')
+    fig.update_layout(
+        title=f'Deep Neural Loss Landscape (Epsilon={epsilon:.3f})',
+        autosize=True,
+        width=800,
+        height=800,
+        scene=dict(
+            xaxis_title='Perturbation Direction 1',
+            yaxis_title='Perturbation Direction 2',
+            zaxis_title='Cross-Entropy Loss'
+        ),
+        margin=dict(l=65, r=50, b=65, t=90)
+    )
     
-    # Save
-    save_path = os.path.join(config.OUTPUT_DIR, "loss_landscape.png")
-    plt.savefig(save_path)
-    print(f"Landscape saved to {save_path}")
-    return save_path
+    return fig
 
 if __name__ == "__main__":
     device = config.DEVICE
