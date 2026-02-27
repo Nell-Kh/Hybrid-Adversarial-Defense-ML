@@ -207,6 +207,20 @@ with st.sidebar:
         "EoT Oracle (Adaptive)"
     ])
     
+    # Mathematical Tooltips
+    attack_explanations = {
+        "FGSM (Fast Gradient)": "**The Brute Force:** Adds noise directly in the direction of the gradient sign to maximize loss instantly.\n\n$x_{adv} = x + \epsilon \cdot sign(\\nabla_x J(x, y))$",
+        "DeepFool (Minimum Norm)": "**The Surgeon:** Iteratively pushes the image to the closest decision boundary, calculating the absolute minimum $L_2$ norm required to fool the model.",
+        "AutoAttack (Ensemble)": "**The Standard:** A parameter-free ensemble of state-of-the-art attacks (APGD-ce, APGD-dlr, FAB, Square) used as the global benchmark for robustness.",
+        "C&W (L2 Optimization)": "**The Sniper:** Solves a complex optimization problem to find the smallest possible perturbation by minimizing $||\delta||_2^2 + c \cdot f(x+\delta)$.",
+        "Ninja (Adaptive PGD)": "**The Ghost:** A custom defense-aware attack. Optimizes dual objectives: maximize classification error while simultaneously minimizing Mahalanobis distance to evade statistical detectors.",
+        "Boundary (Black-Box)": "**The Blind Attacker:** Starts with an adversarial image and walks along the decision boundary to reduce noise. Requires zero gradient information.",
+        "EoT Oracle (Adaptive)": "**The Oracle:** Expectation over Transformation. Calculates gradients across multiple noisy/augmented versions of the image to defeat stochastic defenses like Randomized Smoothing."
+    }
+    
+    if attack_name != "None":
+        st.info(attack_explanations[attack_name])
+    
     # Dynamic parameters
     epsilon = st.slider("Perturbation Magnitude (Epsilon)", 0.0, 0.1, 0.031, step=0.001, help="Controls how much noise the attacker is allowed to add. Higher = more visible noise but stronger attack.")
     
@@ -641,5 +655,50 @@ with tab_radar:
             
             st.plotly_chart(fig, use_container_width=True)
             st.success("Gauntlet Complete! Notice how the red baseline collapses inward on attacks, while the green TRADES envelope remains robust.")
+            
+            # --- Generate PDF Report ---
+            from fpdf import FPDF
+            import tempfile
+            import datetime
+            
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Helvetica", "B", 16)
+            pdf.cell(0, 10, "Adversarial Robustness Evaluation Report", new_x="LMARGIN", new_y="NEXT", align="C")
+            
+            pdf.set_font("Helvetica", "", 12)
+            pdf.cell(0, 10, f"Generated on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}", new_x="LMARGIN", new_y="NEXT", align="C")
+            pdf.ln(10)
+            
+            # Add stats
+            pdf.set_font("Helvetica", "B", 14)
+            pdf.cell(0, 10, "Gauntlet Results (Accuracy %):", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("Helvetica", "", 12)
+            
+            for atk_name in categories:
+                vic_acc = results_victim.get(atk_name, 0)
+                hero_acc = results_hero.get(atk_name, 0)
+                pdf.cell(0, 8, f"* {atk_name}: Baseline = {vic_acc:.1f}% | TRADES Defense = {hero_acc:.1f}%", new_x="LMARGIN", new_y="NEXT")
+                
+            pdf.ln(10)
+            
+            # Export Plotly Figure to PNG and embed in PDF
+            try:
+                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmpfile:
+                    fig.write_image(tmpfile.name)
+                    pdf.image(tmpfile.name, x=10, y=None, w=190)
+                
+                pdf_bytes = pdf.output()
+                
+                st.divider()
+                st.download_button(
+                    label="📄 Download Academic PDF Report",
+                    data=bytes(pdf_bytes),
+                    file_name="Adversarial_Radar_Benchmark.pdf",
+                    mime="application/pdf",
+                    help="Download heavily formatted statistics and charts for your presentation."
+                )
+            except Exception as e:
+                st.warning("Ensure 'kaleido' dependency is installed to export PDF charts.")
 
 st.info("Note: Models trained on Tiny ImageNet (200 classes).")

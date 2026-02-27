@@ -74,8 +74,6 @@ class EoTAttacker(Attacker):
         
         loss_fn = nn.CrossEntropyLoss()
         
-        print(f"Running EoT Oracle Attack (Simulating {self.eot_samples} random shifts per step)...")
-        
         batch_size = images.size(0)
         final_adv = torch.zeros_like(images)
         

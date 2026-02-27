@@ -53,7 +53,6 @@ class BoundaryAttack(Attacker):
         adv_images = images.clone()
         
         # Find a starting point for each image in the batch
-        print("Finding initial adversarial examples (The Starting Point)...")
         for i in range(batch_size):
             while True:
                 # Try a random image (random noise for simplicity)
@@ -64,9 +63,7 @@ class BoundaryAttack(Attacker):
                     adv_images[i] = init_adv.squeeze(0)
                     break
         
-        # --- PHASE 2: THE RANDOM WALK ---
-        print(f"Starting Random Walk for {self.steps} steps...")
-        
+        # --- PHASE 2: THE RANDOM Walk ---
         curr_adv = adv_images.clone()
         
         for step in range(self.steps):
@@ -116,6 +113,5 @@ class BoundaryAttack(Attacker):
                 # Calculate how close we are to the original (L2 distance)
                 # Smaller is better!
                 dist = (curr_adv - images).view(batch_size, -1).norm(dim=1).mean()
-                print(f"Step {step}: Mean Distortion = {dist:.4f}")
 
         return curr_adv
