@@ -10,7 +10,7 @@ images that have been corrupted by adversarial noise.
    (like adversarial static) and keep only the core semantic geometry.
 2. DECODER: Reconstructs the 64x64 image from the latent space. Because the 
    adversarial noise was destroyed in the bottleneck, the Decoder reconstructs
-   a perfectly pristine, clean image that the standard Baseline model can read.
+   a perfectly pristine, clean image that the standard standard model can read.
 """
 import torch
 import torch.nn as nn

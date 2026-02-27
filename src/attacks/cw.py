@@ -14,7 +14,7 @@ from src.attacks.base import Attacker
 
 class CWAttacker(Attacker):
     """
-    Carlini-Wagner (C&W) L2 Attack (The Sniper).
+    Carlini-Wagner (C&W) L2 Attack (The cw l2).
     
     Paper: "Towards Evaluating the Robustness of Neural Networks" (2017)
     
@@ -59,7 +59,7 @@ class CWAttacker(Attacker):
         best_adv_images = images.clone().detach()
         best_l2 = float('inf') * torch.ones(images.size(0)).to(self.device)
         
-        print(f"Running CW Attack (Steps={self.steps}, c={self.c})...")
+        # print(f"Running CW Attack (Steps={self.steps}, c={self.c})...")
         
         for step in range(self.steps):
             # 1. Forward Pass
@@ -133,7 +133,7 @@ if __name__ == "__main__":
     images, labels = next(iter(train_loader))
     
     # Attack
-    print("\n--- Testing Carlini-Wagner (The Sniper) ---")
+    print("\n--- Testing Carlini-Wagner (The cw l2) ---")
     attacker = CWAttacker(model, device, steps=100, c=1.0)
     adv_imgs = attacker.attack(images, labels)
     

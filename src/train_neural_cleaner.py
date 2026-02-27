@@ -34,18 +34,18 @@ def train_autoencoder():
     # 1. Load Data
     train_loader, val_loader = get_dataloaders(batch_size=BATCH_SIZE)
     
-    # 2. Load the Baseline Model (We need this to generate the adversarial attacks)
-    victim_model = get_model(device=device, arch='resnet18')
+    # 2. Load the standard Model (We need this to generate the adversarial attacks)
+    Standard_model = get_model(device=device, arch='resnet18')
     try:
-        victim_model.load_state_dict(torch.load("models/resnet_tinyimagenet.pth", map_location=device))
-        victim_model.eval() # We are NOT training this model, just using it for attacks
-        print("[+] Loaded Baseline Model for adversarial generation.")
+        Standard_model.load_state_dict(torch.load("models/resnet_tinyimagenet.pth", map_location=device))
+        Standard_model.eval() # We are NOT training this model, just using it for attacks
+        print("[+] Loaded standard Model for adversarial generation.")
     except Exception as e:
-        print("[-] Error: Could not load baseline model. Ensure 'models/baseline_resnet18.pth' exists.")
+        print("[-] Error: Could not load standard model. Ensure 'models/standard_resnet18.pth' exists.")
         return
 
     # 3. Initialize the Attacker
-    attacker = FGSMAttacker(victim_model, device, eps=EPSILON)
+    attacker = FGSMAttacker(Standard_model, device, eps=EPSILON)
     
     # 4. Initialize the Autoencoder & Optimizer
     autoencoder = DenoisingAutoencoder().to(device)
@@ -66,7 +66,7 @@ def train_autoencoder():
             labels = labels.to(device)
             
             # STEP 1: Generate Corrupted (Adversarial) Images
-            # We generate the attack on-the-fly and detach it so gradients don't flow back to the victim
+            # We generate the attack on-the-fly and detach it so gradients don't flow back to the Standard
             corrupted_inputs = attacker.attack(inputs, labels).detach()
             
             # STEP 2: Pass through Autoencoder

@@ -18,7 +18,7 @@ def evaluate_defense():
     device = config.DEVICE
     print(f"Evaluating Feature Denoising Defense on {device}...")
     
-    # 1. Load Baseline Model
+    # 1. Load standard Model
     base_model = get_model(device)
     path = os.path.join(config.MODEL_DIR, "resnet_robust.pth")
     

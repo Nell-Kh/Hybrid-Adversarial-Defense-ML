@@ -37,7 +37,7 @@ def main():
     args = parser.parse_args()
 
     device = config.DEVICE
-    print(f"Calibrating Iron Dome on {device}...")
+    print(f"Calibrating Mahalanobis on {device}...")
     
     # 1. Load Model
     model = get_model(device)
@@ -60,7 +60,7 @@ def main():
     # We pass the PGD function so the detector can generate its own training data
     detector.train_classifier(train_loader, simple_pgd, max_batches=args.batches)
     
-    print("\nCalibration Complete. The Iron Dome is now fully operational.")
+    print("\nCalibration Complete. The Mahalanobis is now fully operational.")
 
 if __name__ == "__main__":
     main()

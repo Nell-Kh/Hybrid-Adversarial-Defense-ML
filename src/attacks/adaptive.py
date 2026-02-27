@@ -59,7 +59,7 @@ class AdaptiveAttacker(Attacker):
                 # TARGETED: Minimize error on target label (So we maximize the negative loss)
                 model_loss = -loss_fn(outputs, target_labels)
             
-            # 2. Detector Loss (Fool the Iron Dome)
+            # 2. Detector Loss (Fool the Mahalanobis)
             # We want to MINIMIZE the Mahalanobis distance (look normal)
             # So in our Maximization loop, we SUBTRACT this term.
             anomaly_score = self.detector.calc_torch_score(adv_images)

@@ -67,43 +67,43 @@ def compute_stealth_metrics(clean_tensor, adv_tensor):
 # --- CACHED LOADERS ---
 @st.cache_resource
 def load_models():
-    # 1. Standard Model (Baseline)
-    victim = get_model(DEVICE)
-    victim_path = os.path.join("models", "resnet_tinyimagenet.pth")
-    if os.path.exists(victim_path):
-        victim.load_state_dict(torch.load(victim_path, map_location=DEVICE))
+    # 1. Standard Model (standard)
+    Standard = get_model(DEVICE)
+    Standard_path = os.path.join("models", "resnet_tinyimagenet.pth")
+    if os.path.exists(Standard_path):
+        Standard.load_state_dict(torch.load(Standard_path, map_location=DEVICE))
     else:
-        st.error(f"Standard model not found at {victim_path}")
-    victim.eval()
+        st.error(f"Standard model not found at {Standard_path}")
+    Standard.eval()
     
     # 2. Robust Model (Defense)
-    hero = get_model(DEVICE)
-    hero_path = os.path.join("models", "resnet_robust.pth")
-    if os.path.exists(hero_path):
-        checkpoint = torch.load(hero_path, map_location=DEVICE)
+    Robust = get_model(DEVICE)
+    Robust_path = os.path.join("models", "resnet_robust.pth")
+    if os.path.exists(Robust_path):
+        checkpoint = torch.load(Robust_path, map_location=DEVICE)
         if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-            hero.load_state_dict(checkpoint['model_state_dict'])
+            Robust.load_state_dict(checkpoint['model_state_dict'])
         else:
-            hero.load_state_dict(checkpoint)
+            Robust.load_state_dict(checkpoint)
     else:
-        st.warning(f"Robust model not found at {hero_path}. Falling back to standard model for robust predictions.")
+        st.warning(f"Robust model not found at {Robust_path}. Falling back to standard model for robust predictions.")
         # Fallback so the app doesn't crash completely
-        hero = victim
-    hero.eval()
+        Robust = Standard
+    Robust.eval()
     
-    # 3. Mahalanobis Detector (Iron Dome)
-    detector = MahalanobisDetector(victim, DEVICE)
+    # 3. Mahalanobis Detector (Mahalanobis)
+    detector = MahalanobisDetector(Standard, DEVICE)
     detector.load_stats() # Attempts to load from disk
     
     # 4. Stochastic Ensemble (TTA / Randomized Smoothing)
     # Wraps the robust model to provide Test-Time Augmentation defenses
-    tta_hero = TTA_Ensemble(hero, num_copies=10, max_shift=2, noise_std=0.02)
+    tta_Robust = TTA_Ensemble(Robust, num_copies=10, max_shift=2, noise_std=0.02)
     
     # 5. Certified Robustness Evaluator (Mathematical Guarantees)
     # n=50 for speed in UI, normally n=10,000 for academic papers
-    certifier = CertifiedRobustness(hero, DEVICE, noise_std=0.1, n0=10, n=50)
+    certifier = CertifiedRobustness(Robust, DEVICE, noise_std=0.1, n0=10, n=50)
     
-    return victim, hero, tta_hero, detector, certifier
+    return Standard, Robust, tta_Robust, detector, certifier
 
 @st.cache_resource
 def get_val_dataset():
@@ -137,23 +137,23 @@ st.title("Adversarial Robustness Evaluation")
 
 with st.expander("Overview: Adversarial Machine Learning Framework"):
     st.markdown("""
-    **Welcome to the Adversarial Machine Learning Dashboard!**
+    **Adversarial Machine Learning Dashboard**
     
-    This platform demonstrates how AI Vision Models can be easily tricked by invisible "noise" (Adversarial Attacks), 
-    and how we can use advanced mathematical algorithms to defend them.
+    This platform evaluates the vulnerability of standard convolutional neural networks to adversarial noise, 
+    and tests the efficacy of various mathematical defense mechanisms.
     
-    *   **The Attacker's Goal**: Add microscopic pixel changes to an image so the AI confidently misclassifies it (e.g., seeing a dog as an airplane).
-    *   **The Defender's Goal**: Build "Robust" models that can ignore this noise, or add statistical detectors to catch the attacks in real-time.
+    *   **Attacks**: Apply calculated perturbations to force misclassification.
+    *   **Defenses**: Evaluate robust training paradigms and statistical detection methods.
     
-    Use the **Evaluation Controls** on the left to select an image, pick an attack algorithm, and watch the AI systems battle it out!
+    Use the controls on the left to select an evaluation sample, configure an attack trajectory, and run the pipeline.
     """)
 
-st.markdown("### Comparative Analysis: Standard ResNet18 vs. TRADES-Robust ResNet18")
+st.markdown("### Comparative Analysis: Standard ResNet18 vs. TRADES ResNet18")
 
 # Create Tabs
 tab_eval, tab_landscape, tab_patch, tab_radar = st.tabs(["Evaluation & Defense", "Loss Landscape", "Patch Attacks", "Radar Benchmark"])
 
-victim, hero, tta_hero, detector, certifier = load_models()
+Standard, Robust, tta_Robust, detector, certifier = load_models()
 val_dataset = get_val_dataset()
 labels = val_dataset.targets # List of 10,000 integers
 class_mapping = load_class_mapping()
@@ -209,13 +209,13 @@ with st.sidebar:
     
     # Mathematical Tooltips
     attack_explanations = {
-        "FGSM (Fast Gradient)": "**The Brute Force:** Adds noise directly in the direction of the gradient sign to maximize loss instantly.\n\n$x_{adv} = x + \epsilon \cdot sign(\\nabla_x J(x, y))$",
-        "DeepFool (Minimum Norm)": "**The Surgeon:** Iteratively pushes the image to the closest decision boundary, calculating the absolute minimum $L_2$ norm required to fool the model.",
-        "AutoAttack (Ensemble)": "**The Standard:** A parameter-free ensemble of state-of-the-art attacks (APGD-ce, APGD-dlr, FAB, Square) used as the global benchmark for robustness.",
-        "C&W (L2 Optimization)": "**The Sniper:** Solves a complex optimization problem to find the smallest possible perturbation by minimizing $||\delta||_2^2 + c \cdot f(x+\delta)$.",
-        "Ninja (Adaptive PGD)": "**The Ghost:** A custom defense-aware attack. Optimizes dual objectives: maximize classification error while simultaneously minimizing Mahalanobis distance to evade statistical detectors.",
-        "Boundary (Black-Box)": "**The Blind Attacker:** Starts with an adversarial image and walks along the decision boundary to reduce noise. Requires zero gradient information.",
-        "EoT Oracle (Adaptive)": "**The Oracle:** Expectation over Transformation. Calculates gradients across multiple noisy/augmented versions of the image to defeat stochastic defenses like Randomized Smoothing."
+        "FGSM (Fast Gradient)": "**FGSM:** Computes the gradient of the loss function with respect to the input pixels and adds a scaled perturbation in the direction of the sign.\n\n$x_{adv} = x + \epsilon \cdot sign(\\nabla_x J(x, y))$",
+        "DeepFool (Minimum Norm)": "**DeepFool:** An iterative L2 attack that projects the input onto the closest linear approximation of the decision boundary, seeking the minimal possible perturbation.",
+        "AutoAttack (Ensemble)": "**AutoAttack:** A parameter-free ensemble of established attacks (APGD-ce, APGD-dlr, FAB, Square) used to evaluate worst-case robustness.",
+        "C&W (L2 Optimization)": "**Carlini & Wagner (C&W):** Formulates the attack as an optimization problem, minimizing $||\delta||_2^2 + c \cdot f(x+\delta)$ subject to box constraints.",
+        "Ninja (Adaptive PGD)": "**Adaptive PGD:** A defense-aware attack that modifies the PGD objective function to maximize classification error while minimizing the detector's anomaly score.",
+        "Boundary (Black-Box)": "**Boundary Attack:** A decision-based black-box method that initializes from a completely different class and performs a random walk along the decision boundary.",
+        "EoT Oracle (Adaptive)": "**Expectation over Transformation (EoT):** Designed to bypass stochastic defenses by calculating expected gradients across a distribution of transformations."
     }
     
     if attack_name != "None":
@@ -269,9 +269,9 @@ with tab_eval:
         with st.spinner(f"Executing {attack_name} optimization..."):
             if attack_name == "FGSM (Fast Gradient)":
                 target_image.requires_grad = True
-                output = victim(target_image)
+                output = Standard(target_image)
                 loss = nn.CrossEntropyLoss()(output, target_label)
-                victim.zero_grad()
+                Standard.zero_grad()
                 loss.backward()
                 data_grad = target_image.grad.data
                 sign_data_grad = data_grad.sign()
@@ -280,53 +280,53 @@ with tab_eval:
                 target_image.requires_grad = False
                 
             elif attack_name == "DeepFool (Minimum Norm)":
-                attacker = DeepFool(victim, DEVICE, overshoot=0.02, max_iter=steps if 'steps' in locals() else 50)
+                attacker = DeepFool(Standard, DEVICE, overshoot=0.02, max_iter=steps if 'steps' in locals() else 50)
                 adv_image = attacker.attack(target_image, target_label)
                 
             elif attack_name == "AutoAttack (Ensemble)":
-                attacker = AutoAttackLite(victim, DEVICE, eps=epsilon)
+                attacker = AutoAttackLite(Standard, DEVICE, eps=epsilon)
                 adv_image = attacker.attack(target_image, target_label)
                 
             elif attack_name == "C&W (L2 Optimization)":
-                attacker = CWAttacker(victim, DEVICE, steps=steps if 'steps' in locals() else 50)
+                attacker = CWAttacker(Standard, DEVICE, steps=steps if 'steps' in locals() else 50)
                 target_tensor = torch.tensor([target_class_idx], dtype=torch.long).to(DEVICE) if target_class_idx is not None else None
                 adv_image = attacker.attack(target_image, target_label, target_labels=target_tensor)
                 
             elif attack_name == "Ninja (Adaptive PGD)":
-                attacker = AdaptiveAttacker(victim, DEVICE, detector, eps=epsilon, steps=steps if 'steps' in locals() else 50)
+                attacker = AdaptiveAttacker(Standard, DEVICE, detector, eps=epsilon, steps=steps if 'steps' in locals() else 50)
                 target_tensor = torch.tensor([target_class_idx], dtype=torch.long).to(DEVICE) if target_class_idx is not None else None
                 adv_image = attacker.attack(target_image, target_label, target_labels=target_tensor)
                 
             elif attack_name == "Boundary (Black-Box)":
-                attacker = BoundaryAttack(victim, DEVICE, steps=steps if 'steps' in locals() else 50)
+                attacker = BoundaryAttack(Standard, DEVICE, steps=steps if 'steps' in locals() else 50)
                 adv_image = attacker.attack(target_image, target_label)
                 
             elif attack_name == "EoT Oracle (Adaptive)":
                 st.warning("The Oracle is actively simulating realities to defeat the Stochastic Ensemble...")
-                # We attack the 'hero' (robust model) since EoT is designed to defeat its defenses
-                attacker = EoTAttacker(hero, DEVICE, eps=epsilon, steps=steps if 'steps' in locals() else 20, eot_samples=10, max_shift=2)
+                # We attack the 'Robust' (robust model) since EoT is designed to defeat its defenses
+                attacker = EoTAttacker(Robust, DEVICE, eps=epsilon, steps=steps if 'steps' in locals() else 20, eot_samples=10, max_shift=2)
                 adv_image = attacker.attack(target_image, target_label)
         
         noise = (adv_image - target_image).abs()
                 
     # --- RAW INFERENCE (To prove the attack worked before cleaning) ---
     with torch.no_grad():
-        raw_pred_victim_logits = victim(adv_image)
-        raw_pred_victim = raw_pred_victim_logits.argmax(1).item()
+        raw_pred_Standard_logits = Standard(adv_image)
+        raw_pred_Standard = raw_pred_Standard_logits.argmax(1).item()
         
     # --- DISPLAY ---
     with torch.no_grad():
-        pred_victim_logits = victim(adv_image)
-        pred_victim = pred_victim_logits.argmax(1).item()
+        pred_Standard_logits = Standard(adv_image)
+        pred_Standard = pred_Standard_logits.argmax(1).item()
         
         # Branch defense evaluation based on UI Toggle
         if enable_tta:
             # We pass return_consensus=True to get the dictionary of votes
-            pred_hero_logits, vote_breakdown = tta_hero(adv_image, return_consensus=True)
-            pred_hero = pred_hero_logits.argmax(1).item()
+            pred_Robust_logits, vote_breakdown = tta_Robust(adv_image, return_consensus=True)
+            pred_Robust = pred_Robust_logits.argmax(1).item()
         else:
-            pred_hero_logits = hero(adv_image)
-            pred_hero = pred_hero_logits.argmax(1).item()
+            pred_Robust_logits = Robust(adv_image)
+            pred_Robust = pred_Robust_logits.argmax(1).item()
             vote_breakdown = None
             
         # Calculate Certified Robustness
@@ -342,26 +342,26 @@ with tab_eval:
         except Exception as e:
             trust_score_val = 100.0 # Default to trusted if detector fails
     
-    vis_victim = adv_image
-    vis_hero = adv_image
+    vis_Standard = adv_image
+    vis_Robust = adv_image
     
     if show_heatmap:
-        cam_v = GradCAM(victim, victim.layer4[-1])
-        heatmap_v = cam_v(adv_image, pred_victim)
+        cam_v = GradCAM(Standard, Standard.layer4[-1])
+        heatmap_v = cam_v(adv_image, pred_Standard)
         overlay_v = apply_heatmap(adv_image * 0.5 + 0.5, heatmap_v)
-        cam_h = GradCAM(hero, hero.layer4[-1])
-        heatmap_h = cam_h(adv_image, pred_hero)
+        cam_h = GradCAM(Robust, Robust.layer4[-1])
+        heatmap_h = cam_h(adv_image, pred_Robust)
         overlay_h = apply_heatmap(adv_image * 0.5 + 0.5, heatmap_h)
     
     # Render Stats Summary
     st.sidebar.divider()
-    st.sidebar.subheader("Iron Dome Detector")
-    st.sidebar.markdown("Analyzes deep internal geometry to flag anomalies before inference.", help="Mahalanobis Distance logic.")
+    st.sidebar.subheader("Mahalanobis Distance Detector")
+    st.sidebar.markdown("Evaluates internal feature representations to detect out-of-distribution adversarial samples.")
     st.sidebar.progress(int(trust_score_val))
     if trust_score_val < 50:
-        st.sidebar.warning(f"Anomaly Detected! Trust: {trust_score_val:.1f}%")
+        st.sidebar.warning(f"Anomaly Detected (Trust: {trust_score_val:.1f}%)")
     else:
-        st.sidebar.success(f"Input Clean. Trust: {trust_score_val:.1f}%")
+        st.sidebar.success(f"Sample In-Distribution (Trust: {trust_score_val:.1f}%)")
 
     # Pre-process noise for visualization (min-max normalization to make patterns visible)
     display_noise = noise.detach().squeeze().cpu().permute(1,2,0).numpy()
@@ -370,14 +370,14 @@ with tab_eval:
         display_noise = display_noise / noise_max
 
     # --- SECTION 1: THE ATTACK VECTOR (3 Symmetrical Columns) ---
-    st.subheader("1. The Adversarial Attack Vector", help="Visualizing how the mathematical noise is applied to the original image to create the adversarial input.")
+    st.subheader("1. Input Perturbation Vector", help="Visualization of the applied adversarial noise delta.")
     c1, c2, c3 = st.columns(3)
     with c1: 
-        st.image(to_display(target_image), caption=f"Original Image ({class_name})", use_container_width=True)
+        st.image(to_display(target_image), caption=f"Original Sample ({class_name})", use_container_width=True)
     with c2: 
-        st.image(display_noise, caption="Adversarial Noise (Amplified for Visibility)", clamp=True, use_container_width=True)
+        st.image(display_noise, caption="Adversarial Delta (Normalized)", clamp=True, use_container_width=True)
     with c3: 
-        st.image(to_display(adv_image), caption="Final Adversarial Input", use_container_width=True)
+        st.image(to_display(adv_image), caption="Perturbed Sample", use_container_width=True)
         
     # --- ACADEMIC STEALTH METRICS ---
     if run_analysis and attack_name != "None":
@@ -393,22 +393,22 @@ with tab_eval:
     st.divider()
     
     # --- SECTION 2: COMPARATIVE INFERENCE (2 Symmetrical Columns) ---
-    st.subheader("2. Model Inference Comparison", help="Comparing how the standard baseline model reacts to the attack vs. the fortified TRADES model.")
+    st.subheader("2. Model Inference Comparison", help="Comparing how the standard standard model reacts to the attack vs. the fortified TRADES model.")
     col_a, col_b = st.columns(2)
     with col_a:
-        st.subheader("Standard ResNet18 (Baseline)", help="A standard, unprotected AI model. It performs very well on normal images but is highly vulnerable to being tricked by attacks.")
+        st.subheader("Standard ResNet18 (standard)", help="A standard, unprotected AI model. It performs very well on normal images but is highly vulnerable to being tricked by attacks.")
         
-        pred_vic_name = class_mapping.get(pred_victim, f"Class {pred_victim}")
-        if pred_victim == target_label_int: st.success(f"Prediction: CORRECT ({pred_vic_name})")
+        pred_vic_name = class_mapping.get(pred_Standard, f"Class {pred_Standard}")
+        if pred_Standard == target_label_int: st.success(f"Prediction: CORRECT ({pred_vic_name})")
         else: st.error(f"Prediction: INCORRECT ({pred_vic_name})")
         
-        if show_heatmap: st.image(overlay_v, caption="Baseline Attention Map", use_container_width=True)
+        if show_heatmap: st.image(overlay_v, caption="standard Attention Map", use_container_width=True)
             
     with col_b:
         st.subheader("TRADES ResNet18 (Robust)", help="A fortified AI model defended via TRADES (Tradeoff-inspired Adversarial Defense). It fundamentally restructures its own neural pathways during training to resist malicious adversarial vectors.")
-        pred_hero_name = class_mapping.get(pred_hero, f"Class {pred_hero}")
-        if pred_hero == target_label_int: st.success(f"Prediction: CORRECT ({pred_hero_name})")
-        else: st.warning(f"Prediction: INCORRECT ({pred_hero_name})")
+        pred_Robust_name = class_mapping.get(pred_Robust, f"Class {pred_Robust}")
+        if pred_Robust == target_label_int: st.success(f"Prediction: CORRECT ({pred_Robust_name})")
+        else: st.warning(f"Prediction: INCORRECT ({pred_Robust_name})")
         
         if show_heatmap: 
             st.image(overlay_h, caption="Robust Attention Map (Grad-CAM)", use_container_width=True)
@@ -418,7 +418,7 @@ with tab_eval:
             st.markdown("**Stochastic Ensemble Consensus Vote Tracker:**")
             for voted_class_idx, count in vote_breakdown.items():
                 voted_name = class_mapping.get(voted_class_idx, f"Class {voted_class_idx}")
-                pct = count / tta_hero.num_copies
+                pct = count / tta_Robust.num_copies
                 if voted_class_idx == target_label_int:
                     st.progress(pct, text=f"[CORRECT] {voted_name}: {count} votes")
                 else:
@@ -430,7 +430,7 @@ with tab_eval:
     st.subheader("3. Autonomous Purification Matrix", help="Silently testing the adversarial image against multiple image-processing and neural defenses simultaneously.")
     
     if run_analysis and attack_name != "None":
-        st.markdown("**How it works:** We apply each filtering defense to the adversarial image, and then feed the cleaned image back into the **Standard ResNet18 (Baseline)**. This proves whether the defense actually successfully scrubbed the attack noise from the image. Notice how basic filters often fail, while Neural ML succeeds.")
+        st.markdown("**How it works:** We apply each filtering defense to the adversarial image, and then feed the cleaned image back into the **Standard ResNet18 (standard)**. This proves whether the defense actually successfully scrubbed the attack noise from the image. Notice how basic filters often fail, while Neural ML succeeds.")
         
         filters = {
             "Gaussian Blur": "Gaussian Blur",
@@ -457,9 +457,9 @@ with tab_eval:
                 # Apply filter
                 cleaned_tensor = apply_cleaning(adv_image, method_name, DEVICE)
                 
-                # Get baseline prediction on cleaned image
+                # Get standard prediction on cleaned image
                 with torch.no_grad():
-                    clean_logits = victim(cleaned_tensor)
+                    clean_logits = Standard(cleaned_tensor)
                     clean_pred = clean_logits.argmax(1).item()
                     clean_conf = torch.softmax(clean_logits, dim=1)[0, target_label_int].item() * 100
                     
@@ -485,13 +485,13 @@ with tab_eval:
     metric_col1, metric_col2, metric_col3 = st.columns(3)
     
     with metric_col1:
-        st.markdown("**1. Standard Baseline Confidence**", help="How confident the unprotected AI is about the correct answer. Attacks will easily crush this percentage to 0%.")
-        baseline_pct = torch.softmax(pred_victim_logits, dim=1)[0, target_label_int].item() * 100
-        st.progress(int(baseline_pct), text=f"Target Class Confidence: {baseline_pct:.1f}%")
+        st.markdown("**1. Standard standard Confidence**", help="How confident the unprotected AI is about the correct answer. Attacks will easily crush this percentage to 0%.")
+        standard_pct = torch.softmax(pred_Standard_logits, dim=1)[0, target_label_int].item() * 100
+        st.progress(int(standard_pct), text=f"Target Class Confidence: {standard_pct:.1f}%")
         
     with metric_col2:
-        st.markdown("**2. TRADES Robust Confidence**", help="How confident the Defended AI is. Because it trains heavily against attacks, it sacrifices some baseline confidence for much higher resistance under fire.")
-        robust_pct = torch.softmax(pred_hero_logits, dim=1)[0, target_label_int].item() * 100
+        st.markdown("**2. TRADES Robust Confidence**", help="How confident the Defended AI is. Because it trains heavily against attacks, it sacrifices some standard confidence for much higher resistance under fire.")
+        robust_pct = torch.softmax(pred_Robust_logits, dim=1)[0, target_label_int].item() * 100
         st.progress(int(robust_pct), text=f"Target Class Confidence: {robust_pct:.1f}%")
         
     with metric_col3:
@@ -515,7 +515,7 @@ with tab_landscape:
             label_tensor = torch.tensor([label_int], dtype=torch.long).to(DEVICE)
             
             # Use appropriate grid steps for speed vs quality
-            fig = visualize_loss_landscape(hero, DEVICE, img_tensor, label_tensor, epsilon=0.1, steps=20)
+            fig = visualize_loss_landscape(Robust, DEVICE, img_tensor, label_tensor, epsilon=0.1, steps=20)
             if fig is not None:
                 st.plotly_chart(fig, use_container_width=True)
             else:
@@ -548,9 +548,9 @@ with tab_patch:
         with col2: patch_x = st.slider("X Coordinate", 0, max(0, max_coord), int(max_coord/2))
         with col3: patch_y = st.slider("Y Coordinate", 0, max(0, max_coord), int(max_coord/2))
         
-        # Calculate Original Baseline
-        orig_pred = victim(img_tensor).argmax(1).item()
-        orig_saliency = get_saliency_map(victim, img_tensor, orig_pred)
+        # Calculate Original standard
+        orig_pred = Standard(img_tensor).argmax(1).item()
+        orig_saliency = get_saliency_map(Standard, img_tensor, orig_pred)
         orig_pred_name = class_mapping.get(orig_pred, f"Class {orig_pred}")
         
         # Apply Patch explicitly based on UI coordinates
@@ -566,8 +566,8 @@ with tab_patch:
         patched_img = torch.clamp(patched_img, -1, 1)
         
         # Calculate Patched Prediction
-        patched_pred = victim(patched_img).argmax(1).item()
-        patched_saliency = get_saliency_map(victim, patched_img.detach(), patched_pred)
+        patched_pred = Standard(patched_img).argmax(1).item()
+        patched_saliency = get_saliency_map(Standard, patched_img.detach(), patched_pred)
         patched_pred_name = class_mapping.get(patched_pred, f"Class {patched_pred}")
         
         # Display comparative tracking pipeline
@@ -612,40 +612,40 @@ with tab_radar:
             
             # Define Attacker Gauntlet
             attacks = {
-                "FGSM": FGSMAttacker(victim, DEVICE, eps=8/255),
-                "C&W": CWAttacker(victim, DEVICE, steps=20),
-                "Ninja (PGD)": AdaptiveAttacker(victim, DEVICE, detector, eps=8/255, steps=10),
-                "AutoAttack": AutoAttackLite(victim, DEVICE, eps=8/255)
+                "FGSM": FGSMAttacker(Standard, DEVICE, eps=8/255),
+                "C&W": CWAttacker(Standard, DEVICE, steps=20),
+                "Ninja (PGD)": AdaptiveAttacker(Standard, DEVICE, detector, eps=8/255, steps=10),
+                "AutoAttack": AutoAttackLite(Standard, DEVICE, eps=8/255)
             }
             
-            results_victim = {}
-            results_hero = {}
+            results_Standard = {}
+            results_Robust = {}
             
             # Calculate Clean Accuracy Focus
             with torch.no_grad():
-                results_victim["Clean Accuracy"] = (victim(images).argmax(1) == labels).float().mean().item() * 100
-                results_hero["Clean Accuracy"] = (hero(images).argmax(1) == labels).float().mean().item() * 100
+                results_Standard["Clean Accuracy"] = (Standard(images).argmax(1) == labels).float().mean().item() * 100
+                results_Robust["Clean Accuracy"] = (Robust(images).argmax(1) == labels).float().mean().item() * 100
             
             # Execute Gauntlet
             for atk_name, attacker in attacks.items():
                 adv_imgs = attacker.attack(images, labels)
                 with torch.no_grad():
-                    results_victim[atk_name] = (victim(adv_imgs).argmax(1) == labels).float().mean().item() * 100
-                    results_hero[atk_name] = (hero(adv_imgs).argmax(1) == labels).float().mean().item() * 100
+                    results_Standard[atk_name] = (Standard(adv_imgs).argmax(1) == labels).float().mean().item() * 100
+                    results_Robust[atk_name] = (Robust(adv_imgs).argmax(1) == labels).float().mean().item() * 100
                 
-            categories = list(results_victim.keys())
+            categories = list(results_Standard.keys())
             categories_loop = categories + [categories[0]]
             
-            vic_vals = list(results_victim.values())
+            vic_vals = list(results_Standard.values())
             vic_vals.append(vic_vals[0])
             
-            hero_vals = list(results_hero.values())
-            hero_vals.append(hero_vals[0])
+            Robust_vals = list(results_Robust.values())
+            Robust_vals.append(Robust_vals[0])
             
             # Build Radar
             fig = go.Figure()
-            fig.add_trace(go.Scatterpolar(r=vic_vals, theta=categories_loop, fill='toself', name='Baseline (Standard)', line_color='red'))
-            fig.add_trace(go.Scatterpolar(r=hero_vals, theta=categories_loop, fill='toself', name='TRADES (Robust)', line_color='green'))
+            fig.add_trace(go.Scatterpolar(r=vic_vals, theta=categories_loop, fill='toself', name='standard (Standard)', line_color='red'))
+            fig.add_trace(go.Scatterpolar(r=Robust_vals, theta=categories_loop, fill='toself', name='TRADES (Robust)', line_color='green'))
             
             fig.update_layout(
                 polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
@@ -654,7 +654,7 @@ with tab_radar:
             )
             
             st.plotly_chart(fig, use_container_width=True)
-            st.success("Gauntlet Complete! Notice how the red baseline collapses inward on attacks, while the green TRADES envelope remains robust.")
+            st.success("Evaluation complete. Radar chart indicates standard model degradation under perturbation vs TRADES stability.")
             
             # --- Generate PDF Report ---
             from fpdf import FPDF
@@ -676,9 +676,9 @@ with tab_radar:
             pdf.set_font("Helvetica", "", 12)
             
             for atk_name in categories:
-                vic_acc = results_victim.get(atk_name, 0)
-                hero_acc = results_hero.get(atk_name, 0)
-                pdf.cell(0, 8, f"* {atk_name}: Baseline = {vic_acc:.1f}% | TRADES Defense = {hero_acc:.1f}%", new_x="LMARGIN", new_y="NEXT")
+                vic_acc = results_Standard.get(atk_name, 0)
+                Robust_acc = results_Robust.get(atk_name, 0)
+                pdf.cell(0, 8, f"* {atk_name}: standard = {vic_acc:.1f}% | TRADES Defense = {Robust_acc:.1f}%", new_x="LMARGIN", new_y="NEXT")
                 
             pdf.ln(10)
             

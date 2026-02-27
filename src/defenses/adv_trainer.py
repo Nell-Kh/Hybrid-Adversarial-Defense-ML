@@ -78,7 +78,7 @@ def train_robust_model(epochs=5, batch_size=64):
     # 2. Load Model (Start from the standard pre-trained one to save time)
     model = get_model(device)
     if os.path.exists(config.MODEL_SAVE_PATH):
-        print("Loading pre-trained standard model as baseline...")
+        print("Loading pre-trained standard model as standard...")
         model.load_state_dict(torch.load(config.MODEL_SAVE_PATH, map_location=device))
     else:
         print("Warning: No pre-trained model found. Starting from scratch.")
