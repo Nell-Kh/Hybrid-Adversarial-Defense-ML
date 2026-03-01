@@ -1,9 +1,25 @@
 data/
-models/
 __pycache__/
 .DS_Store
 
 outputs/
 .venv/
 
-# End of gitignore
+# Ignore images, reports, and LaTeX build files
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.pdf
+*.txt
+*.tex
+*.aux
+*.log
+*.out
+*.gz
+*.fls
+*.fdb_latexmk
+
+# Ignore models directory completely, EXCEPT for .pth weight files
+models/*
+!models/*.pth

@@ -53,6 +53,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+*Note: All pre-trained model weights (including the standard ResNet-18, the TRADES-fortified model, and the Neural Autoencoder) are explicitly included in the `models/` directory of this repository. You do not need to train the models from scratch to run the interactive dashboard.*
+
 ### 2. Launching the Interactive Dashboard
 The easiest way to interact with the project is via the Streamlit UI:
 ```bash

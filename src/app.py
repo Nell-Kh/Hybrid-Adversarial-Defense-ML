@@ -280,7 +280,7 @@ with tab_eval:
                 target_image.requires_grad = False
                 
             elif attack_name == "DeepFool (Minimum Norm)":
-                attacker = DeepFool(Standard, DEVICE, overshoot=0.02, max_iter=steps if 'steps' in locals() else 50)
+                attacker = DeepFool(Standard, DEVICE, overshoot=0.02, max_iters=steps if 'steps' in locals() else 50)
                 adv_image = attacker.attack(target_image, target_label)
                 
             elif attack_name == "AutoAttack (Ensemble)":
