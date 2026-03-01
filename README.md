@@ -7,7 +7,7 @@ We utilize the **Tiny-ImageNet** dataset (200 classes) to simulate a high-dimens
 
 ---
 
-## 🚀 Interactive Streamlit Dashboard
+## Interactive Streamlit Dashboard
 
 The core of this project is a fully interactive, academic-grade Streamlit Web Dashboard that allows users to generate and visualize adversarial attacks in real-time.
 
@@ -21,7 +21,7 @@ The core of this project is a fully interactive, academic-grade Streamlit Web Da
 
 ---
 
-## ⚔️ Implemented Attack Algorithms
+## Implemented Attack Algorithms
 
 The framework supports a comprehensive suite of attack vectors:
 
@@ -35,7 +35,7 @@ The framework supports a comprehensive suite of attack vectors:
 
 ---
 
-## 🛡️ Implemented Defense Mechanisms
+## Implemented Defense Mechanisms
 
 1. **Robust Adversarial Training (TRADES):** The core defense. Re-trains the ResNet-18 using the TRADES algorithm (Zhang et al. 2019), which mathematically optimizes the trade-off between clean accuracy and boundary robustness using a KL-Divergence regularizer.
 2. **Mahalanobis Distance Detector:** Analyzes the internal deep representations (activations) of the neural network to identify out-of-distribution adversarial vectors before they reach the final softmax layer.
@@ -44,7 +44,7 @@ The framework supports a comprehensive suite of attack vectors:
 
 ---
 
-## 🛠️ Installation & Execution
+## Installation & Execution
 
 ### 1. Environment Setup
 ```bash
@@ -77,4 +77,4 @@ python3 src/train_advanced.py --arch resnet18 --epochs 40 --beta 6.0
 
 ---
 
-*Authors: Nell Khoury, Celine Michael*
+Nell Khoury, Celine Michael*
