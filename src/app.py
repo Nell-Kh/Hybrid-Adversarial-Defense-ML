@@ -485,14 +485,22 @@ with tab_eval:
     metric_col1, metric_col2, metric_col3 = st.columns(3)
     
     with metric_col1:
-        st.markdown("**1. Standard standard Confidence**", help="How confident the unprotected AI is about the correct answer. Attacks will easily crush this percentage to 0%.")
-        standard_pct = torch.softmax(pred_Standard_logits, dim=1)[0, target_label_int].item() * 100
-        st.progress(int(standard_pct), text=f"Target Class Confidence: {standard_pct:.1f}%")
+        st.markdown("**1. Standard Model Vulnerability**", help="How confident the unprotected AI is in the attacker's forced hallucination.")
+        
+        if enable_targeting and target_class_idx is not None:
+            eval_class_idx = target_class_idx
+            eval_label = "Target Class Confidence"
+        else:
+            eval_class_idx = pred_Standard
+            eval_label = "Adversarial Confidence"
+            
+        standard_pct = torch.softmax(pred_Standard_logits, dim=1)[0, eval_class_idx].item() * 100
+        st.progress(int(standard_pct), text=f"{eval_label}: {standard_pct:.1f}%")
         
     with metric_col2:
-        st.markdown("**2. TRADES Robust Confidence**", help="How confident the Defended AI is. Because it trains heavily against attacks, it sacrifices some standard confidence for much higher resistance under fire.")
-        robust_pct = torch.softmax(pred_Robust_logits, dim=1)[0, target_label_int].item() * 100
-        st.progress(int(robust_pct), text=f"Target Class Confidence: {robust_pct:.1f}%")
+        st.markdown("**2. TRADES Suppression**", help="How well the Defended AI suppresses the attacker's forced hallucination.")
+        robust_pct = torch.softmax(pred_Robust_logits, dim=1)[0, eval_class_idx].item() * 100
+        st.progress(int(robust_pct), text=f"{eval_label}: {robust_pct:.1f}%")
         
     with metric_col3:
         st.markdown("**3. Certified Mathematical Radius**", help="The Holy Grail of AI defense. This uses 'Randomized Smoothing' to mathematically PROVE that absolutely NO ATTACK with an intensity lower than 'Radius (R)' can ever trick the model. It is a 100% guarantee.")
@@ -656,49 +664,6 @@ with tab_radar:
             st.plotly_chart(fig, use_container_width=True)
             st.success("Evaluation complete. Radar chart indicates standard model degradation under perturbation vs TRADES stability.")
             
-            # --- Generate PDF Report ---
-            from fpdf import FPDF
-            import tempfile
-            import datetime
-            
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Helvetica", "B", 16)
-            pdf.cell(0, 10, "Adversarial Robustness Evaluation Report", new_x="LMARGIN", new_y="NEXT", align="C")
-            
-            pdf.set_font("Helvetica", "", 12)
-            pdf.cell(0, 10, f"Generated on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}", new_x="LMARGIN", new_y="NEXT", align="C")
-            pdf.ln(10)
-            
-            # Add stats
-            pdf.set_font("Helvetica", "B", 14)
-            pdf.cell(0, 10, "Gauntlet Results (Accuracy %):", new_x="LMARGIN", new_y="NEXT")
-            pdf.set_font("Helvetica", "", 12)
-            
-            for atk_name in categories:
-                vic_acc = results_Standard.get(atk_name, 0)
-                Robust_acc = results_Robust.get(atk_name, 0)
-                pdf.cell(0, 8, f"* {atk_name}: standard = {vic_acc:.1f}% | TRADES Defense = {Robust_acc:.1f}%", new_x="LMARGIN", new_y="NEXT")
-                
-            pdf.ln(10)
-            
-            # Export Plotly Figure to PNG and embed in PDF
-            try:
-                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmpfile:
-                    fig.write_image(tmpfile.name)
-                    pdf.image(tmpfile.name, x=10, y=None, w=190)
-                
-                pdf_bytes = pdf.output()
-                
-                st.divider()
-                st.download_button(
-                    label="📄 Download Academic PDF Report",
-                    data=bytes(pdf_bytes),
-                    file_name="Adversarial_Radar_Benchmark.pdf",
-                    mime="application/pdf",
-                    help="Download heavily formatted statistics and charts for your presentation."
-                )
-            except Exception as e:
-                st.warning("Ensure 'kaleido' dependency is installed to export PDF charts.")
+
 
 st.info("Note: Models trained on Tiny ImageNet (200 classes).")
