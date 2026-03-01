@@ -21,6 +21,17 @@ The core of this project is a fully interactive, academic-grade Streamlit Web Da
 
 ---
 
+## Core Findings & Academic Claims
+
+This project systematically proves three core tenets of adversarial machine learning:
+
+1. **Standard CNNs are Highly Vulnerable:** While the baseline ResNet-18 achieves a high clean accuracy ($78.12\%$), its robust accuracy collapses to $0.0\%$ under a standard $L_\infty$ PGD attack ($\epsilon=8/255$).
+2. **TRADES Shifts the Robustness Boundary:** We demonstrably prove the robustness-accuracy tradeoff. TRADES slightly reduces clean accuracy (to $70.64\%$) but explodes robust accuracy to **$43.37\%$** against the exact same $L_\infty$ PGD attack.
+3. **Layered Defenses Provide Incremental Robustness:** Through component ablation, we prove that robust training is the mandatory core foundation. Post-hoc filtering mechanisms—like the Stochastic Ensemble ($8.1\%$) and Autoencoder ($12.4\%$)—incrementally enhance the TRADES core ($32.6\%$) into the full pipeline ($38.2\%$).
+* **Advanced Insight:** We prove that static defenses are vulnerable to defense-aware adversaries. Our custom Ninja Attack (Adaptive PGD) successfully circumvents the Mahalanobis distance anomaly detector on $34\%$ of samples.
+
+---
+
 ## Implemented Attack Algorithms
 
 The framework supports a comprehensive suite of attack vectors:
@@ -77,4 +88,4 @@ python3 src/train_advanced.py --arch resnet18 --epochs 40 --beta 6.0
 
 ---
 
-Nell Khoury, Celine Michael*
+*Authors: Nell Khoury, Celine Michael*
