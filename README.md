@@ -21,7 +21,7 @@ The core of this project is a fully interactive, academic-grade Streamlit Web Da
 
 ---
 
-## 📊 Core Findings & Academic Claims
+## Core Findings & Academic Claims
 
 This project systematically proves three core tenets of adversarial machine learning:
 
@@ -32,7 +32,7 @@ This project systematically proves three core tenets of adversarial machine lear
 
 ---
 
-## ⚔️ Implemented Attack Algorithms
+## Implemented Attack Algorithms
 
 The framework supports a comprehensive suite of attack vectors:
 
@@ -87,5 +87,4 @@ python3 src/train_advanced.py --arch resnet18 --epochs 40 --beta 6.0
 ```
 
 ---
-
-*Authors: Nell Khoury, Celine Michael*
+Nell Khoury, Celine Michael*
