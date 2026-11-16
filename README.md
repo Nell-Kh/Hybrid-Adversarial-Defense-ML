@@ -1,34 +1,31 @@
 # Visualizing Adversarial Robustness: Attacks & Defenses in Deep Learning
 
-This repository contains the complete source code for our Adversarial Machine Learning research project. 
-The objective of this project is to evaluate the vulnerability of standard Convolutional Neural Networks (ResNet-18) to adversarial perturbations, and to implement state-of-the-art mathematical defense mechanisms to fortify them.
+This repository contains the source code for our adversarial machine learning project. We evaluate how vulnerable a standard ResNet-18 is to adversarial perturbations, and test several defenses against them.
 
-We utilize the **Tiny-ImageNet** dataset (200 classes) to simulate a high-dimensional, real-world classification environment.
+We use the **Tiny-ImageNet** dataset (200 classes).
 
 ---
 
 ## Interactive Streamlit Dashboard
 
-The core of this project is a fully interactive, academic-grade Streamlit Web Dashboard that allows users to generate and visualize adversarial attacks in real-time.
+The project includes an interactive Streamlit dashboard for generating and visualizing adversarial attacks.
 
 ### Dashboard Features:
-1. **Live Evaluation Pipeline:** Select any image from the Tiny-ImageNet validation set and apply 7 different attack methodologies on the fly.
-2. **Targeted Feature Spoofing:** Override untargeted attacks to mathematically force the network into hallucinating user-defined target classes (e.g., forcing the model to classify a dog as a sports car).
-3. **Mathematical Stealth Metrics:** Live computation of $L_2$ Norm, $L_\infty$ Norm, Structural Similarity Index (SSIM), and Peak Signal-to-Noise Ratio (PSNR) to guarantee mathematical imperceptibility.
-4. **Radar Benchmark Suite:** An automated gauntlet that runs 4 primary attacks across both standard and robust models simultaneously, generating interactive Plotly Radar Charts that prove geometric stability. Features a built-in PDF Report exporter.
-5. **Interactive Loss Landscape:** Render a 3D topological map of the neural network's decision boundary to visualize how adversarial attacks exploit highly non-convex local maxima.
-6. **Physical Patch Attacks:** Drag and drop an adversarial patch anywhere on the image to simulate physical-world camouflage attacks.
+1. **Live evaluation:** select any image from the Tiny-ImageNet validation set and apply 7 different attacks.
+2. **Targeted attacks:** push the network toward a user-chosen target class (e.g., classifying a dog as a sports car).
+3. **Perturbation metrics:** $L_2$ and $L_\infty$ norms, SSIM and PSNR, to measure how visible the perturbation is.
+4. **Benchmark suite:** runs 4 main attacks on both the standard and the robust model and shows the results as radar charts, with a PDF report export.
+5. **Loss landscape:** a 3D visualization of the loss around an input, to illustrate how attacks move it across the decision boundary.
+6. **Patch attacks:** drag an adversarial patch anywhere on the image to simulate a physical-world attack.
 
 ---
 
-## Core Findings & Academic Claims
+## Main Results
 
-This project systematically proves three core tenets of adversarial machine learning:
-
-1. **Standard CNNs are Highly Vulnerable:** While the baseline ResNet-18 achieves a high clean accuracy ($78.12\%$), its robust accuracy collapses to $0.0\%$ under a standard $L_\infty$ PGD attack ($\epsilon=8/255$).
-2. **TRADES Shifts the Robustness Boundary:** We demonstrably prove the robustness-accuracy tradeoff. TRADES slightly reduces clean accuracy (to $70.64\%$) but explodes robust accuracy to **$43.37\%$** against the exact same $L_\infty$ PGD attack.
-3. **Layered Defenses Provide Incremental Robustness:** Through component ablation against the rigorous AutoAttack Ensemble (which drops the baseline TRADES retention from $43.37\%$ down to $32.6\%$), we prove that robust training is the mandatory core foundation. Post-hoc filtering mechanisms—like the Stochastic Ensemble ($8.1\%$) and Autoencoder ($12.4\%$)—incrementally enhance the TRADES core ($32.6\%$) into the full pipeline ($38.2\%$).
-* **Advanced Insight:** We prove that static defenses are vulnerable to defense-aware adversaries. Our custom Ninja Attack (Adaptive PGD) successfully circumvents the Mahalanobis distance anomaly detector on $34\%$ of samples.
+1. **Standard CNNs are highly vulnerable.** The baseline ResNet-18 reaches $78.12\%$ clean accuracy, but its robust accuracy drops to $0.0\%$ under an $L_\infty$ PGD attack ($\epsilon=8/255$).
+2. **TRADES trades clean accuracy for robustness.** TRADES lowers clean accuracy to $70.64\%$ but raises robust accuracy under the same PGD attack to $43.37\%$.
+3. **Layered defenses add incremental robustness.** Against AutoAttack, TRADES alone keeps $32.6\%$ robust accuracy. In our ablation, the post-hoc components (stochastic ensemble: $8.1\%$, autoencoder: $12.4\%$) add incremental robustness on top of TRADES, and the full pipeline reaches $38.2\%$.
+4. **Static defenses can be bypassed by adaptive attacks.** Our adaptive PGD attack, which also minimizes the detector's anomaly score, evades the Mahalanobis-distance detector on $34\%$ of samples.
 
 ---
 
